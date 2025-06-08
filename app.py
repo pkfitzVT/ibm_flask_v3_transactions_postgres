@@ -15,7 +15,8 @@ transactions = [
 # Read operation: List all transactions
 @app.route("/")
 def get_transactions():
-    return render_template("transactions.html", transactions=transactions)
+    total_amount = sum(t['amount'] for t in transactions)
+    return render_template("transactions.html", transactions=transactions, total_amount=total_amount)
 
 # Create operation
 @app.route("/add", methods=["GET", "POST"])
