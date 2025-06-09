@@ -27,3 +27,9 @@ def test_t_test_returns_pvalue_between_0_and_1():
     groupB = [20, 22, 21, 23]
     p = t_test(groupA, groupB)
     assert 0.0 <= p <= 1.0
+
+def test_abtest_requires_login(client):
+    """GET /analysis/abtest must redirect to login."""
+    resp = client.get('/analysis/abtest')
+    assert resp.status_code == 302
+    assert '/login' in resp.headers['Location']
