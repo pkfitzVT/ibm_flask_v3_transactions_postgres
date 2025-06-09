@@ -106,3 +106,14 @@ def regression():
         # chart_img=img_data,
         # or filtered_points=json.dumps([...]) for JS
     )
+
+
+@main_bp.route('/analysis/abtest')
+@login_required
+def abtest_api():
+    amounts = [t['amount'] for t in transactions]
+    mid     = len(amounts)//2
+    a = remove_outliers(amounts[:mid])
+    b = remove_outliers(amounts[mid:])
+    p = t_test(a, b)
+    return render_template('abtest.html', groupA=a, groupB=b, p_value=p)
