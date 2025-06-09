@@ -67,3 +67,42 @@ def search_transactions():
         except ValueError:
             return "Invalid input", 400
     return render_template('search.html')
+
+@main_bp.route('/analysis/regression', methods=['GET','POST'])
+@login_required
+def regression():
+    # Default filter values
+    start = request.values.get('start_date', '2024-01-01')
+    end   = request.values.get('end_date',   '2024-12-31')
+    period = request.values.get('period', 'all')  # morning/noon/afternoon/all
+
+    # Parse dates
+    start_dt = datetime.fromisoformat(start)
+    end_dt   = datetime.fromisoformat(end)
+
+    # Filter transactions by date AND time-of-day
+    filtered = []
+    for t in transactions:
+        dt = t['date'] if isinstance(t['date'], datetime) else datetime.fromisoformat(t['date'])
+        if not (start_dt <= dt <= end_dt):
+            continue
+        if period == 'morning'   and dt.hour != 9:   continue
+        if period == 'noon'      and dt.hour != 12:  continue
+        if period == 'afternoon' and dt.hour != 16:  continue
+        filtered.append((dt.timestamp(), t['amount']))  # x = timestamp, y = amount
+
+    # Compute regression on timestamp vs. amount
+    result = compute_regression(filtered) if filtered else {}
+
+    # Prepare image (optional Matplotlib code here, or skip for Chart.js)
+    # ...
+
+    return render_template(
+        'regression.html',
+        start=start,
+        end=end,
+        period=period,
+        result=result,
+        # chart_img=img_data,
+        # or filtered_points=json.dumps([...]) for JS
+    )

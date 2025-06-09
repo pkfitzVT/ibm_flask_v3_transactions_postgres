@@ -1,0 +1,27 @@
+<form method="get" class="form-inline mb-4">
+  <label>From: <input type="date" name="start_date" value="{{ start }}"></label>
+  <label>To:   <input type="date" name="end_date"   value="{{ end   }}"></label>
+  <label>Period:
+    <select name="period">
+      {% for p in ['all','morning','noon','afternoon'] %}
+      <option value="{{p}}" {% if p==period %}selected{% endif %}>{{ p.title() }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button class="btn btn-primary">Filter</button>
+</form>
+
+{% if result %}
+  <h4>Regression Results</h4>
+  <ul>
+    <li>Slope:     {{ result.slope | round(3) }}</li>
+    <li>Intercept: {{ result.intercept | round(3) }}</li>
+    <li>R²:         {{ result.r2 | round(3) }}</li>
+  </ul>
+
+  {% if chart_img %}
+    <img src="data:image/png;base64,{{ chart_img }}" alt="regression plot">
+  {% endif %}
+{% else %}
+  <p>No data in that range/period.</p>
+{% endif %}
