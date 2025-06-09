@@ -56,7 +56,7 @@
     {% for transaction in transactions %}
     <tr>
         <td>{{ transaction.date }}</td>
-        <td>{{ transaction.amount }}</td>
+       <td>{{ "%.2f"|format(transaction.amount) }}</td>
         <td class="transaction-actions">
             <a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_transaction', transaction_id=transaction.id) }}">Edit</a>
             <a class="btn btn-sm btn-danger" href="{{ url_for('main.delete_transaction', transaction_id=transaction.id) }}">Delete</a>
@@ -67,7 +67,7 @@
     <!-- TOTAL ROW outside the loop -->
     <tr>
         <td><strong>Total</strong></td>
-        <td><strong>{{ total_amount }}</strong></td>
+        <td>{{ "%.2f"|format(total_amount) }}</td>
         <td></td>
     </tr>
 </tbody>
