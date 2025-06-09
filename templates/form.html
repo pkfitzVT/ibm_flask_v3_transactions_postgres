@@ -29,7 +29,7 @@
 <body>
     <div class="container">
         <h1 class="text-center">Add Transaction</h1>
-        <form action="{{ url_for('add_transaction') }}" method="POST">
+        <form action="{{ url_for('main.add_transaction') }}" method="POST">
             <div class="form-group">
                 <label for="date">Date:</label>
                 <input type="date" name="date" id="date" class="form-control" required>
@@ -42,7 +42,7 @@
 
             <div class="form-footer">
                 <input class="btn btn-success" type="submit" value="Add Transaction">
-                <a class="btn btn-info" href="{{ url_for('get_transactions') }}">Go Back</a>
+                <a class="btn btn-info" href="{{ url_for('main.get_transactions') }}">Go Back</a>
             </div>
         </form>
     </div>
