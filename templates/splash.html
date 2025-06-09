@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Splash</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+  <style>
+    body {
+      background: linear-gradient(to right, #6a11cb, #2575fc);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .splash-container {
+      text-align: center;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 40px;
+      border-radius: 10px;
+    }
+    .splash-container h1 {
+      margin-bottom: 30px;
+    }
+    .splash-container .btn {
+      min-width: 120px;
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-container">
+    <h1>Welcome to Finance App</h1>
+    <p>Please log in or register to continue.</p>
+    <div>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-light btn-lg">Login</a>
+      <a href="{{ url_for('auth.register') }}" class="btn btn-outline-light btn-lg">Register</a>
+    </div>
+  </div>
+</body>
+</html>
