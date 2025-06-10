@@ -7,6 +7,7 @@ from .stats.regression import compute_regression
 from .stats.abtest     import remove_outliers, t_test
 import json
 
+from datetime import datetime
 
 
 main_bp = Blueprint('main', __name__, template_folder='../templates')
@@ -120,12 +121,61 @@ def regression():
     )
 
 
-@main_bp.route('/analysis/abtest')
+
+TIME_RANGES = {
+    "morning":   range(6, 12),
+    "afternoon": range(12, 18),
+    "evening":   range(18, 24),
+    "night":     range(0, 6),
+}
+
+@main_bp.route('/analysis/abtest', methods=['GET','POST'])
 @login_required
 def abtest_api():
-    amounts = [t['amount'] for t in transactions]
-    mid     = len(amounts)//2
-    a = remove_outliers(amounts[:mid])
-    b = remove_outliers(amounts[mid:])
+    # 1) read your grouping choice
+    group_by = request.values.get('group_by', 'half')
+    paramA   = request.values.get('paramA', None)
+    paramB   = request.values.get('paramB', None)
+
+    # 2) parse all txns into (datetime, amount) pairs
+    parsed = []
+    for t in transactions:
+        dt = t['date'] if isinstance(t['date'], datetime) else datetime.fromisoformat(t['date'])
+        parsed.append((dt, t['amount']))
+
+    # 3) bucket into two lists
+    if group_by == 'weekday':
+        a_list = [amt for dt, amt in parsed if dt.weekday() < 5]
+        b_list = [amt for dt, amt in parsed if dt.weekday() >= 5]
+
+    elif group_by == 'timeofday' and paramA in TIME_RANGES and paramB in TIME_RANGES:
+        a_list = [amt for dt, amt in parsed if dt.hour in TIME_RANGES[paramA]]
+        b_list = [amt for dt, amt in parsed if dt.hour in TIME_RANGES[paramB]]
+
+    elif group_by == 'month' and paramA and paramB:
+        mA = int(paramA); mB = int(paramB)
+        a_list = [amt for dt, amt in parsed if dt.month == mA]
+        b_list = [amt for dt, amt in parsed if dt.month == mB]
+
+    else:
+        # fallback to “first half vs second half”:
+        amounts = [amt for _, amt in parsed]
+        mid     = len(amounts) // 2
+        a_list = amounts[:mid]
+        b_list = amounts[mid:]
+
+    # 4) run your existing outlier removal & t-test
+    a = remove_outliers(a_list)
+    b = remove_outliers(b_list)
     p = t_test(a, b)
-    return render_template('ab_test.html', groupA=a, groupB=b, p_value=p)
+
+    # 5) render, passing back your params so the form stays in sync
+    return render_template(
+        'ab_test.html',
+        groupA=a,
+        groupB=b,
+        p_value=p,
+        group_by=group_by,
+        paramA=paramA,
+        paramB=paramB
+    )
