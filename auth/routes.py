@@ -36,3 +36,4 @@ def login():
             return redirect(url_for('main.get_transactions'))
         flash('Invalid credentials', 'danger')
     return render_template('login.html')
+
