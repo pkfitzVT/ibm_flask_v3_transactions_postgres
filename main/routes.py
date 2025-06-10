@@ -15,7 +15,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-
+import numpy as np
+import matplotlib.dates as mdates
 
 main_bp = Blueprint('main', __name__, template_folder='../templates')
 
@@ -88,43 +89,77 @@ def analysis():
     return render_template('analysis.html')
 
 
+
 @main_bp.route('/analysis/regression', methods=['GET','POST'])
 @login_required
 def regression():
-    # Default filter values
-    start = request.values.get('start_date', '2024-01-01')
-    end   = request.values.get('end_date',   '2024-12-31')
-    period = request.values.get('period', 'all')  # morning/noon/afternoon/all
+    # 1) Read inputs
+    start  = request.values.get('start_date', '2024-01-01')
+    end    = request.values.get('end_date',   '2024-12-31')
+    period = request.values.get('period',     'all')
 
-    # Parse dates
+    # 2) Parse dates
     start_dt = datetime.fromisoformat(start)
     end_dt   = datetime.fromisoformat(end)
 
-    # Filter transactions by date AND time-of-day
+
+
+    # 3) Filter, keeping datetime objects (not timestamps)
     filtered = []
     for t in transactions:
         dt = t['date'] if isinstance(t['date'], datetime) else datetime.fromisoformat(t['date'])
         if not (start_dt <= dt <= end_dt):
             continue
-        if period == 'morning'   and dt.hour != 9:   continue
-        if period == 'noon'      and dt.hour != 12:  continue
-        if period == 'afternoon' and dt.hour != 16:  continue
-        filtered.append((dt.timestamp(), t['amount']))  # x = timestamp, y = amount
+        if period == 'morning'   and not (6  <= dt.hour < 12): continue
+        if period == 'noon'      and not (12 <= dt.hour < 14): continue
+        if period == 'afternoon' and not (14 <= dt.hour < 18): continue
+        filtered.append((dt, t['amount']))
 
-    # Compute regression on timestamp vs. amount
-    result = compute_regression(filtered) if filtered else {}
+    # 4) Compute regression
+    dates = [dt for dt, amt in filtered]
+    amounts = [amt for dt, amt in filtered]
+    timestamps = [dt.timestamp() for dt in dates]
 
-    # Prepare image (optional Matplotlib code here, or skip for Chart.js)
-    # ...
+    # compute regression on timestamp vs amount
+    if len(set(timestamps)) > 1 and len(set(amounts)) > 1:
+        result = compute_regression(list(zip(timestamps, amounts)))
+    else:
+        result = {}
 
+    chart_img = None
+    if dates and amounts and 'slope' in result and 'intercept' in result:
+        fig, ax = plt.subplots()
+
+        # scatter with real dates
+        ax.scatter(dates, amounts, alpha=0.6, label='Data')
+
+        # compute fitted y = m * (dt.timestamp()) + b
+        fit_y = [result['slope'] * ts + result['intercept'] for ts in timestamps]
+        ax.plot(dates, fit_y, '-', label='Fit')
+
+        # format x-axis as dates
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(mdates.AutoDateLocator()))
+        fig.autofmt_xdate()
+
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Amount')
+        ax.set_title('Regression: Data & Trend Line')
+        ax.legend()
+
+        buf = BytesIO()
+        fig.savefig(buf, format='png', bbox_inches='tight')
+        plt.close(fig)
+        buf.seek(0)
+        chart_img = base64.b64encode(buf.read()).decode('ascii')
+    # 6) Render
     return render_template(
         'regression.html',
         start=start,
         end=end,
         period=period,
         result=result,
-        # chart_img=img_data,
-        # or filtered_points=json.dumps([...]) for JS
+        chart_img=chart_img
     )
 
 

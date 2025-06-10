@@ -11,17 +11,24 @@
   <button class="btn btn-primary">Filter</button>
 </form>
 
-{% if result %}
-  <h4>Regression Results</h4>
-  <ul>
-    <li>Slope:     {{ result.slope | round(3) }}</li>
-    <li>Intercept: {{ result.intercept | round(3) }}</li>
-    <li>R²:         {{ result.r2 | round(3) }}</li>
-  </ul>
+<div class="mt-4">
+      <h5>Results:</h5>
+      <ul>
+        <li>Slope: {{ result.slope if result.slope is not none else 'N/A' }}</li>
+        <li>Intercept: {{ result.intercept if result.intercept is not none else 'N/A' }}</li>
+        <li>R²: {{ result.r2 if result.r2 is not none else 'N/A' }}</li>
+      </ul>
+    </div>
 
-  {% if chart_img %}
-    <img src="data:image/png;base64,{{ chart_img }}" alt="regression plot">
-  {% endif %}
-{% else %}
-  <p>No data in that range/period.</p>
-{% endif %}
+    {% if chart_img %}
+    <div class="mb-5">
+      <h5>Data + Trend Line:</h5>
+      <img
+        src="data:image/png;base64,{{ chart_img }}"
+        alt="Regression chart"
+        class="img-fluid border"
+      />
+    </div>
+    {% endif %}
+
+
