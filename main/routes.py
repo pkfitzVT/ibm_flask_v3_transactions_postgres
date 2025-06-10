@@ -68,6 +68,12 @@ def search_transactions():
             return "Invalid input", 400
     return render_template('search.html')
 
+@main_bp.route('/analysis')
+@login_required
+def analysis():
+    return render_template('analysis.html')
+
+
 @main_bp.route('/analysis/regression', methods=['GET','POST'])
 @login_required
 def regression():

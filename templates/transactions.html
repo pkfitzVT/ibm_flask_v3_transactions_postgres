@@ -41,11 +41,21 @@
     </style>
 </head>
 <body>
+
     <div class="container">
         <h1 class="text-center">Transaction Records</h1>
 
         <table class="table transaction-table">
             <thead>
+            <tr>
+                <td>
+            <hr/>
+                    <div class="text-center my-4">
+                      <a href="{{ url_for('main.analysis') }}" class="btn btn-info">
+                        Go to Analysis Dashboard
+                      </a>
+                    </div>
+                </td></tr>
                 <tr>
                     <th>Date</th>
                     <th>Amount</th>

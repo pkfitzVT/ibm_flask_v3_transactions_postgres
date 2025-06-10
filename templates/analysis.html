@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Analysis Dashboard</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
+</head>
+<body class="p-4">
+  <h1>Data Analysis</h1>
+  <ul class="list-unstyled">
+    <li><a href="{{ url_for('main.regression') }}" class="btn btn-primary mb-2">Regression Analysis</a></li>
+    <li><a href="{{ url_for('main.abtest_api') }}" class="btn btn-secondary">A/B Test</a></li>
+  </ul>
+  <a href="{{ url_for('main.get_transactions') }}">← Back to Transactions</a>
+</body>
+</html>
