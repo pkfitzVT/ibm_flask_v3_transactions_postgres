@@ -7,10 +7,21 @@
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
 </head>
 <body class="p-4">
-  <h1>A/B Test Results</h1>
-  <p>Group A (first half, outliers removed): {{ groupA }}</p>
-  <p>Group B (second half, outliers removed): {{ groupB }}</p>
-  <p><strong>P-value:</strong> {{ p_value | default('N/A') }}</p>
-  <a href="{{ url_for('main.analysis') }}" class="btn btn-link">← Back to Analysis</a>
+  <div class="container">
+    <h1 class="mb-4">A/B Test Results</h1>
+    <div class="mb-3">
+      <h5>Group A (first half, outliers removed):</h5>
+      <pre>{{ groupA }}</pre>
+    </div>
+    <div class="mb-3">
+      <h5>Group B (second half, outliers removed):</h5>
+      <pre>{{ groupB }}</pre>
+    </div>
+    <div class="mb-4">
+      <h5>P-value:</h5>
+      <p>{{ p_value if p_value is not none else 'N/A' }}</p>
+    </div>
+    <a href="{{ url_for('main.analysis') }}" class="btn btn-link">&larr; Back to Analysis</a>
+  </div>
 </body>
 </html>

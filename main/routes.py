@@ -128,4 +128,4 @@ def abtest_api():
     a = remove_outliers(amounts[:mid])
     b = remove_outliers(amounts[mid:])
     p = t_test(a, b)
-    return render_template('abtest.html', groupA=a, groupB=b, p_value=p)
+    return render_template('ab_test.html', groupA=a, groupB=b, p_value=p)
