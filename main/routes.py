@@ -3,6 +3,12 @@ from datetime import datetime
 from .data import transactions
 from auth.utils import login_required
 
+from .stats.regression import compute_regression
+from .stats.abtest     import remove_outliers, t_test
+import json
+
+
+
 main_bp = Blueprint('main', __name__, template_folder='../templates')
 
 @main_bp.route('/transactions')

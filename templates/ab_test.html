@@ -1,4 +1,16 @@
-<h2>A/B Test Results</h2>
-<p>Group A (first half): {{ groupA }}</p>
-<p>Group B (second half): {{ groupB }}</p>
-<p>P-value: {{ p_value | round(4) }}</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>A/B Test Results</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
+</head>
+<body class="p-4">
+  <h1>A/B Test Results</h1>
+  <p>Group A (first half, outliers removed): {{ groupA }}</p>
+  <p>Group B (second half, outliers removed): {{ groupB }}</p>
+  <p><strong>P-value:</strong> {{ p_value | default('N/A') }}</p>
+  <a href="{{ url_for('main.analysis') }}" class="btn btn-link">← Back to Analysis</a>
+</body>
+</html>
