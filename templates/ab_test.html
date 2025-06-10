@@ -4,24 +4,43 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>A/B Test Results</title>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
+  <link rel="stylesheet"
+        href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
 </head>
 <body class="p-4">
   <div class="container">
     <h1 class="mb-4">A/B Test Results</h1>
+
     <div class="mb-3">
-      <h5>Group A (first half, outliers removed):</h5>
+      <h5>Group A (outliers removed):</h5>
       <pre>{{ groupA }}</pre>
     </div>
+
     <div class="mb-3">
-      <h5>Group B (second half, outliers removed):</h5>
+      <h5>Group B (outliers removed):</h5>
       <pre>{{ groupB }}</pre>
     </div>
+
     <div class="mb-4">
       <h5>P-value:</h5>
       <p>{{ p_value if p_value is not none else 'N/A' }}</p>
     </div>
-    <a href="{{ url_for('main.analysis') }}" class="btn btn-link">&larr; Back to Analysis</a>
+
+    <!-- ← Insert this block: -->
+    {% if boxplot_img %}
+    <div class="mb-5">
+      <h5>Boxplot:</h5>
+      <img
+        src="data:image/png;base64,{{ boxplot_img }}"
+        alt="A/B boxplot"
+        class="img-fluid border"
+      />
+    </div>
+    {% endif %}
+
+    <a href="{{ url_for('main.analysis') }}" class="btn btn-link">
+      &larr; Back to Analysis
+    </a>
   </div>
 </body>
 </html>

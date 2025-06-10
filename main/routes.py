@@ -9,6 +9,13 @@ import json
 
 from datetime import datetime
 
+from io import BytesIO
+import base64
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+
 
 main_bp = Blueprint('main', __name__, template_folder='../templates')
 
@@ -169,12 +176,25 @@ def abtest_api():
     b = remove_outliers(b_list)
     p = t_test(a, b)
 
+    # ── generate boxplot ────────────────────────────────────────────────
+    fig, ax = plt.subplots()
+    ax.boxplot([a, b], labels=['Group A', 'Group B'])
+    ax.set_title('A/B Test Boxplot')
+
+    buf = BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+
+    boxplot_img = base64.b64encode(buf.read()).decode('ascii')
+
     # 5) render, passing back your params so the form stays in sync
     return render_template(
         'ab_test.html',
         groupA=a,
         groupB=b,
         p_value=p,
+        boxplot_img=boxplot_img,
         group_by=group_by,
         paramA=paramA,
         paramB=paramB
