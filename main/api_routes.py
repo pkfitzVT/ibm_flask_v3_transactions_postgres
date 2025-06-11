@@ -1,15 +1,18 @@
 # main/api_routes.py
 
-from flask import Blueprint, jsonify, request, session, current_app
+import io
+import base64
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+from flask import Blueprint, jsonify, request, current_app, session
+from auth.utils import login_required
+from .data import transactions
+from auth.routes import users
+from .stats.regression import compute_regression  # import your stat function
+from .stats.abtest import run_ab_test
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-
-from .data import transactions            # in‐memory transaction list
-from auth.routes import users             # in‐memory users list
-from auth.utils import login_required     # session validator
-from .stats.abtest     import run_ab_test
-from .stats.regression import run_regression
-
 
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -24,18 +27,27 @@ CORS(
 
 @api_bp.route('/register', methods=['POST'])
 def api_register():
-    data = request.get_json() or {}
-    email = data.get('email')
-    pwd   = data.get('password')
-    if not email or not pwd:
-        return jsonify({'error': 'Missing email or password'}), 400
-    if any(u['email'] == email for u in users):
-        return jsonify({'error': 'Email already registered'}), 400
+    try:
+        data = request.get_json(force=True) or {}
+        current_app.logger.debug(f"Register payload: {data!r}")
 
-    pw_hash = generate_password_hash(pwd)
-    new_user = {'id': len(users) + 1, 'email': email, 'pw_hash': pw_hash}
-    users.append(new_user)
-    return jsonify({'message': 'Registered successfully'}), 201
+        email = data.get('email')
+        pwd   = data.get('password')
+        if not email or not pwd:
+            return jsonify({'error': 'Missing email or password'}), 400
+
+        if any(u['email'] == email for u in users):
+            return jsonify({'error': 'Email already registered'}), 400
+
+        pw_hash   = generate_password_hash(pwd)
+        new_user  = {'id': len(users) + 1, 'email': email, 'pw_hash': pw_hash}
+        users.append(new_user)
+
+        return jsonify({'message': 'Registered successfully'}), 201
+
+    except Exception as e:
+        current_app.logger.exception("Registration failed")
+        return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/login', methods=['POST'])
 def api_login():
@@ -142,15 +154,76 @@ def api_ab_test():
 @api_bp.route('/analysis/regression', methods=['GET'])
 @login_required
 def api_regression():
-    # Pull filter params from the URL, e.g. /api/analysis/regression?start=2025-01-01&months=1,2
-    start  = request.args.get('start')    # eg: "2025-01-01"
-    end    = request.args.get('end')      # eg: "2025-06-30"
-    months = request.args.get('months')   # eg: "1,2,3"
-    hours  = request.args.get('hours')    # eg: "9,10,11"
+    # 1) Parse period → hours filter
+    period = request.args.get('period', 'all').lower()
+    if period == 'morning':
+        hours = list(range(0, 12))
+    elif period == 'noon':
+        hours = [12]
+    elif period == 'afternoon':
+        hours = list(range(13, 18))
+    else:
+        hours = None
 
-    # Convert comma-lists into Python lists of ints, or None
-    months = [int(m) for m in months.split(',')] if months else None
-    hours  = [int(h) for h in hours.split(',')]   if hours  else None
+    # 2) Parse date-range filters
+    start_str = request.args.get('start')
+    end_str   = request.args.get('end')
+    start_dt = datetime.fromisoformat(start_str) if start_str else None
+    end_dt   = datetime.fromisoformat(end_str)   if end_str   else None
 
-    result = run_regression(start=start, end=end, months=months, hours=hours)
-    return jsonify(result), 200
+    # 3) Rebuild (timestamp, amount) pairs
+    pairs = []
+    for t in transactions:
+        raw = t.get('dateTime') or t.get('date')
+        if not raw:
+            continue
+
+        # strip any trailing "T00:00" or extra offset
+        if 'T' in raw:
+            raw = raw.split('T', 1)[0]
+        if raw.count(' ') > 1:
+            raw = raw.rsplit(' ', 1)[0]
+
+        # parse into datetime
+        try:
+            dt = datetime.fromisoformat(raw)
+        except ValueError:
+            try:
+                dt = datetime.strptime(raw, '%Y-%m-%d %H:%M:%S')
+            except Exception as e:
+                current_app.logger.debug(f"Bad date {raw!r}: {e}")
+                continue
+
+        # apply filters
+        if start_dt and dt < start_dt:
+            continue
+        if end_dt   and dt > end_dt:
+            continue
+        if hours    and dt.hour not in hours:
+            continue
+
+        pairs.append((dt.timestamp(), t['amount']))
+
+    # 4) Compute regression stats
+    stats = compute_regression(pairs)  # { intercept, slope, r_squared }
+
+    # 5) Plot scatter + fit line
+    xs = np.array([x for x,_ in pairs])
+    ys = np.array([y for _,y in pairs])
+    plt.figure()
+    plt.scatter(xs, ys, alpha=0.6)
+    plt.plot(xs, stats['intercept'] + stats['slope'] * xs, linewidth=2)
+    plt.tight_layout()
+
+    # 6) Encode to base64 PNG
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    plt.close()
+    buf.seek(0)
+    chart_b64 = base64.b64encode(buf.read()).decode('ascii')
+
+    # 7) Return JSON with stats + chart
+    return jsonify({
+        **stats,
+        'chart_img': chart_b64
+    }), 200
