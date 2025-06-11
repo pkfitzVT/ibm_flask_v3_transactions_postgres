@@ -7,7 +7,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from .data import transactions            # in‐memory transaction list
 from auth.routes import users             # in‐memory users list
 from auth.utils import login_required     # session validator
-from analysis_module import run_ab_test, run_regression
+from .stats.abtest     import run_ab_test
+from .stats.regression import run_regression
+
+
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 CORS(
@@ -135,16 +138,19 @@ def api_ab_test():
     result = run_ab_test()
     return jsonify(result), 200
 
+
 @api_bp.route('/analysis/regression', methods=['GET'])
 @login_required
 def api_regression():
-    """
-    Returns:
-      {
-        "intercept": float,
-        "slope":     float,
-        "r_squared": float
-      }
-    """
-    model = run_regression()
-    return jsonify(model), 200
+    # Pull filter params from the URL, e.g. /api/analysis/regression?start=2025-01-01&months=1,2
+    start  = request.args.get('start')    # eg: "2025-01-01"
+    end    = request.args.get('end')      # eg: "2025-06-30"
+    months = request.args.get('months')   # eg: "1,2,3"
+    hours  = request.args.get('hours')    # eg: "9,10,11"
+
+    # Convert comma-lists into Python lists of ints, or None
+    months = [int(m) for m in months.split(',')] if months else None
+    hours  = [int(h) for h in hours.split(',')]   if hours  else None
+
+    result = run_regression(start=start, end=end, months=months, hours=hours)
+    return jsonify(result), 200
