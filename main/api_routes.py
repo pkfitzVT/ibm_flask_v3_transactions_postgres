@@ -3,12 +3,13 @@
 from flask import Blueprint, jsonify, request, session, current_app
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from .data import transactions            # in-memory transaction list
-from auth.routes import users             # in-memory users list
+
+from .data import transactions            # in‐memory transaction list
+from auth.routes import users             # in‐memory users list
 from auth.utils import login_required     # session validator
+from analysis_module import run_ab_test, run_regression
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
-# enable CORS on this blueprint
 CORS(
     api_bp,
     supports_credentials=True,
@@ -61,6 +62,7 @@ def api_me():
         return jsonify({'error': 'Not found'}), 404
     return jsonify({'id': user['id'], 'email': user['email']}), 200
 
+
 # --- Transactions endpoints with full datetime support and unique IDs ---
 
 @api_bp.route('/transactions', methods=['GET'])
@@ -80,16 +82,15 @@ def list_transactions():
 def create_transaction():
     try:
         data = request.get_json() or {}
-        dt = data.get('dateTime')
+        dt  = data.get('dateTime')
         amt = data.get('amount')
         if not dt or amt is None:
             return jsonify({'error': 'Missing dateTime or amount'}), 400
-        # Compute a unique ID using the max existing id
         max_id = max((t['id'] for t in transactions), default=0)
         new_txn = {'id': max_id + 1, 'dateTime': dt, 'amount': amt}
         transactions.append(new_txn)
         return jsonify(new_txn), 201
-    except Exception as e:
+    except Exception:
         current_app.logger.exception('Error creating transaction')
         return jsonify({'error': 'Internal server error'}), 500
 
@@ -106,7 +107,7 @@ def update_transaction(txn_id):
         if 'amount' in data:
             txn['amount'] = data['amount']
         return jsonify(txn), 200
-    except Exception as e:
+    except Exception:
         current_app.logger.exception('Error updating transaction')
         return jsonify({'error': 'Internal server error'}), 500
 
@@ -116,3 +117,34 @@ def delete_transaction(txn_id):
     global transactions
     transactions = [t for t in transactions if t['id'] != txn_id]
     return jsonify({'message': 'Deleted'}), 200
+
+
+# --- New Analysis endpoints (JSON only) ---
+
+@api_bp.route('/analysis/abtest', methods=['GET'])
+@login_required
+def api_ab_test():
+    """
+    Returns:
+      {
+        "mean_a":   float,
+        "mean_b":   float,
+        "p_value":  float
+      }
+    """
+    result = run_ab_test()
+    return jsonify(result), 200
+
+@api_bp.route('/analysis/regression', methods=['GET'])
+@login_required
+def api_regression():
+    """
+    Returns:
+      {
+        "intercept": float,
+        "slope":     float,
+        "r_squared": float
+      }
+    """
+    model = run_regression()
+    return jsonify(model), 200
