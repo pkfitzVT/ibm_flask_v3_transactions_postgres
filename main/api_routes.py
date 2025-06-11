@@ -1,11 +1,10 @@
 # main/api_routes.py
-from flask import (
-    Blueprint, jsonify, request, session
-)
+
+from flask import Blueprint, jsonify, request, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from .data import transactions
-from auth.routes import users  # your in-memory users list
-from auth.utils import login_required  # stub or real checker
+from auth.routes import users           # your in-memory users list
+from auth.utils import login_required   # stub or real checker
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -22,7 +21,7 @@ def api_register():
         return jsonify({'error': 'Email already registered'}), 400
 
     pw_hash = generate_password_hash(pwd)
-    new_user = {'id': len(users)+1, 'email': email, 'pw_hash': pw_hash}
+    new_user = {'id': len(users) + 1, 'email': email, 'pw_hash': pw_hash}
     users.append(new_user)
     return jsonify({'message': 'Registered successfully'}), 201
 
@@ -43,6 +42,18 @@ def api_login():
 def api_logout():
     session.clear()
     return jsonify({'message': 'Logged out'}), 200
+
+@api_bp.route('/me', methods=['GET'])
+def api_me():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user = next((u for u in users if u['id'] == user_id), None)
+    if not user:
+        return jsonify({'error': 'Not found'}), 404
+
+    return jsonify({'id': user['id'], 'email': user['email']}), 200
 
 #
 # Transactions endpoints (JSON)
@@ -66,7 +77,7 @@ def create_transaction():
     transactions.append(new_txn)
     return jsonify(new_txn), 201
 
-@api_bp.route('/transactions/<int:txn_id>', methods=['PUT'])
+@api_bp.route('/transactions/<int:txn_id>', methods=['PUT', 'PATCH'])
 @login_required
 def update_transaction(txn_id):
     data = request.get_json()
@@ -80,5 +91,5 @@ def update_transaction(txn_id):
 @login_required
 def delete_transaction(txn_id):
     global transactions
-    transactions[:] = [t for t in transactions if t['id'] != txn_id]
+    transactions = [t for t in transactions if t['id'] != txn_id]
     return jsonify({'message': 'Deleted'}), 200
