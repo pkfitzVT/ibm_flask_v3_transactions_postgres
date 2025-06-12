@@ -29,30 +29,14 @@ def t_test(groupA, groupB):
     _, pvalue = stats.ttest_ind(groupA, groupB, equal_var=False)
     return float(pvalue)
 
-def run_ab_test():
-    """
-    1. Pull all transaction amounts
-    2. Clean via remove_outliers()
-    3. Split into two groups (first half vs. second half by timestamp/order)
-    4. Compute means & p-value
-    5. Return a dict for JSONifying
-    """
-    # Extract and clean
-    amounts = [t['amount'] for t in transactions]
-    cleaned = remove_outliers(amounts)
-
-    # Split into two groups (customize this logic as you like)
-    mid = len(cleaned) // 2
-    groupA = cleaned[:mid]
-    groupB = cleaned[mid:]
-
-    # Compute summary stats
-    mean_a = float(np.mean(groupA)) if groupA else None
-    mean_b = float(np.mean(groupB)) if groupB else None
-    p_val  = t_test(groupA, groupB)
-
+def run_ab_test(group_by, param_a, param_b):
+    # TEMP: Just return params to test flow
     return {
-        'mean_a':  mean_a,
-        'mean_b':  mean_b,
-        'p_value': p_val
+        'group_by': group_by,
+        'param_a': param_a,
+        'param_b': param_b,
+        'mean_a': 0,
+        'mean_b': 0,
+        'p_value': 1.0
     }
+
