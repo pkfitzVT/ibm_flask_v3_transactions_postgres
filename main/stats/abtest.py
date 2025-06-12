@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import io
 import base64
 from datetime import datetime
-from .data import transactions
+from ..data import transactions
 import scipy.stats as stats
 
 def remove_outliers(data):
