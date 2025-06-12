@@ -136,7 +136,7 @@ def delete_transaction(txn_id):
 
 # --- New Analysis endpoints (JSON only) ---
 
-@api_bp.route('/analysis/abtest', methods=['GET'])
+@api_bp.route('/analysis/abtest', methods=['GET', 'POST'])
 @login_required
 def api_ab_test():
     """
@@ -147,9 +147,26 @@ def api_ab_test():
         "p_value":  float
       }
     """
-    result = run_ab_test()
-    return jsonify(result), 200
+    try:
+        if request.method == 'POST':
+            data = request.get_json(force=True) or {}
+            group_by = data.get('group_by')
+            param_a  = data.get('param_a')
+            param_b  = data.get('param_b')
 
+            if not group_by or not param_a or not param_b:
+                return jsonify({'error': 'Missing parameters'}), 400
+
+            result = run_ab_test(group_by, param_a, param_b)
+        else:
+            # fallback GET → run default test if needed
+            result = run_ab_test()
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        current_app.logger.exception("Error running A/B test")
+        return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/analysis/regression', methods=['GET'])
 @login_required
