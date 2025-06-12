@@ -1,10 +1,10 @@
-# main/stats/abtest.py
 import numpy as np
-from scipy import stats
-
-# import the shared transactions list from main/data.py
-from ..data import transactions
-
+import matplotlib.pyplot as plt
+import io
+import base64
+from datetime import datetime
+from .data import transactions
+import scipy.stats as stats
 
 def remove_outliers(data):
     """
