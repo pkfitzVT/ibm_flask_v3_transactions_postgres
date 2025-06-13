@@ -1,5 +1,3 @@
-# main/api_routes.py
-
 import io
 import base64
 import numpy as np
@@ -13,6 +11,7 @@ from .stats.regression import compute_regression  # import your stat function
 from .stats.abtest import run_ab_test
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
+import matplotlib.dates as mdates
 
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -83,14 +82,19 @@ def api_me():
 @api_bp.route('/transactions', methods=['GET'])
 @login_required
 def list_transactions():
-    # Normalize legacy 'date' field into 'dateTime'
+    # Build a fresh payload to avoid mutating the global transactions list
+    payload = []
     for t in transactions:
-        if 'dateTime' not in t:
-            if 'date' in t:
-                t['dateTime'] = f"{t.pop('date')}T00:00"
+        copy_t = t.copy()
+        # Backfill dateTime if not present
+        if 'dateTime' not in copy_t:
+            if 'date' in copy_t:
+                copy_t['dateTime'] = f"{copy_t['date']}T00:00"
             else:
-                t['dateTime'] = None
-    return jsonify(transactions), 200
+                copy_t['dateTime'] = None
+        payload.append(copy_t)
+
+    return jsonify(payload), 200
 
 @api_bp.route('/transactions', methods=['POST'])
 @login_required
@@ -139,14 +143,6 @@ def delete_transaction(txn_id):
 @api_bp.route('/analysis/abtest', methods=['GET', 'POST'])
 @login_required
 def api_ab_test():
-    """
-    Returns:
-      {
-        "mean_a":   float,
-        "mean_b":   float,
-        "p_value":  float
-      }
-    """
     try:
         if request.method == 'POST':
             data = request.get_json(force=True) or {}
@@ -159,7 +155,6 @@ def api_ab_test():
 
             result = run_ab_test(group_by, param_a, param_b)
         else:
-            # fallback GET → run default test if needed
             result = run_ab_test()
 
         return jsonify(result), 200
@@ -171,7 +166,6 @@ def api_ab_test():
 @api_bp.route('/analysis/regression', methods=['GET'])
 @login_required
 def api_regression():
-    # 1) Parse period → hours filter
     period = request.args.get('period', 'all').lower()
     if period == 'morning':
         hours = list(range(0, 12))
@@ -182,36 +176,25 @@ def api_regression():
     else:
         hours = None
 
-    # 2) Parse date-range filters
-    start_str = request.args.get('start')
-    end_str   = request.args.get('end')
+    start_str = request.args.get('start_date')
+    end_str   = request.args.get('end_date')
     start_dt = datetime.fromisoformat(start_str) if start_str else None
     end_dt   = datetime.fromisoformat(end_str)   if end_str   else None
 
-    # 3) Rebuild (timestamp, amount) pairs
     pairs = []
     for t in transactions:
         raw = t.get('dateTime') or t.get('date')
         if not raw:
             continue
-
-        # strip any trailing "T00:00" or extra offset
         if 'T' in raw:
-            raw = raw.split('T', 1)[0]
-        if raw.count(' ') > 1:
-            raw = raw.rsplit(' ', 1)[0]
-
-        # parse into datetime
+            raw_date = raw
+        else:
+            raw_date = raw
         try:
-            dt = datetime.fromisoformat(raw)
+            dt = datetime.fromisoformat(raw_date)
         except ValueError:
-            try:
-                dt = datetime.strptime(raw, '%Y-%m-%d %H:%M:%S')
-            except Exception as e:
-                current_app.logger.debug(f"Bad date {raw!r}: {e}")
-                continue
+            continue
 
-        # apply filters
         if start_dt and dt < start_dt:
             continue
         if end_dt   and dt > end_dt:
@@ -219,28 +202,40 @@ def api_regression():
         if hours    and dt.hour not in hours:
             continue
 
-        pairs.append((dt.timestamp(), t['amount']))
+        pairs.append((dt, float(t['amount'])))
 
-    # 4) Compute regression stats
-    stats = compute_regression(pairs)  # { intercept, slope, r_squared }
+    if not pairs:
+        return jsonify({'slope': None, 'intercept': None, 'r_squared': None, 'chart_img': None}), 200
 
-    # 5) Plot scatter + fit line
-    xs = np.array([x for x,_ in pairs])
-    ys = np.array([y for _,y in pairs])
-    plt.figure()
-    plt.scatter(xs, ys, alpha=0.6)
-    plt.plot(xs, stats['intercept'] + stats['slope'] * xs, linewidth=2)
-    plt.tight_layout()
+    ts_amounts = [(dt.timestamp(), amt) for dt, amt in pairs]
+    stats      = compute_regression(ts_amounts)
+    slope      = stats['slope']
+    intercept  = stats['intercept']
+    r2         = stats['r_squared']
 
-    # 6) Encode to base64 PNG
+    fig, ax = plt.subplots(figsize=(8, 4))
+    dates   = [dt for dt, _ in pairs]
+    amounts = [amt for _, amt in pairs]
+    ax.scatter(dates, amounts, alpha=0.6, label='Data')
+
+    xs_ts  = np.array([d.timestamp() for d in dates])
+    y_pred = intercept + slope * xs_ts
+    ax.plot(dates, y_pred, 'r-', linewidth=2, label='Trend')
+
+    locator   = mdates.AutoDateLocator()
+    formatter = mdates.ConciseDateFormatter(locator)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+    fig.autofmt_xdate()
+
+    ax.set_title('Regression Analysis')
+    ax.set_ylabel('Amount')
+    ax.legend()
+
     buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    plt.close()
+    plt.savefig(buf, format='png', bbox_inches='tight')
+    plt.close(fig)
     buf.seek(0)
     chart_b64 = base64.b64encode(buf.read()).decode('ascii')
 
-    # 7) Return JSON with stats + chart
-    return jsonify({
-        **stats,
-        'chart_img': chart_b64
-    }), 200
+    return jsonify({'slope': float(slope), 'intercept': float(intercept), 'r_squared': float(r2), 'chart_img': chart_b64}), 200
