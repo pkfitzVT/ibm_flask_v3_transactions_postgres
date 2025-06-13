@@ -30,19 +30,41 @@
     <div class="container">
         <h1 class="text-center">Add Transaction</h1>
         <form action="{{ url_for('main.add_transaction') }}" method="POST">
-            <div class="form-group">
-                <label for="date">Date:</label>
-                <input type="date" name="date" id="date" class="form-control" required>
+           <div class="form-group">
+              <label for="dateTime">Date & Time:</label>
+              <input
+                type="datetime-local"
+                name="dateTime"
+                id="dateTime"
+                class="form-control"
+                required
+              >
             </div>
 
             <div class="form-group">
                 <label for="amount">Amount:</label>
-                <input type="number" name="amount" id="amount" class="form-control" required>
+                <input
+                    type="number"
+                    name="amount"
+                    id="amount"
+                    class="form-control"
+                    step="any"
+                    required
+                >
             </div>
 
             <div class="form-footer">
-                <input class="btn btn-success" type="submit" value="Add Transaction">
-                <a class="btn btn-info" href="{{ url_for('main.get_transactions') }}">Go Back</a>
+                <input
+                    class="btn btn-success"
+                    type="submit"
+                    value="Add Transaction"
+                >
+                <a
+                    class="btn btn-info"
+                    href="{{ url_for('main.get_transactions') }}"
+                >
+                    Go Back
+                </a>
             </div>
         </form>
     </div>

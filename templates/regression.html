@@ -1,25 +1,93 @@
-<form method="get" class="form-inline mb-4">
-  <label>From: <input type="date" name="start_date" value="{{ start }}"></label>
-  <label>To:   <input type="date" name="end_date"   value="{{ end   }}"></label>
-  <label>Period:
-    <select name="period">
-      {% for p in ['all','morning','noon','afternoon'] %}
-      <option value="{{p}}" {% if p==period %}selected{% endif %}>{{ p.title() }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <button class="btn btn-primary">Filter</button>
-</form>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Regression Analysis</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet"
+        href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
+  <style>
+    body {
+      background: linear-gradient(to right, #f6d365, #fda085);
+      color: #333;
+    }
+    .page-card {
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background: white;
+      border: 2px solid #f6d365;
+      border-radius: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-card">
+    <h1 class="mb-4">Regression Analysis</h1>
 
-<div class="mt-4">
+    <!-- Filter form -->
+    <form method="get" class="form-inline mb-4" action="{{ url_for('main.regression') }}">
+      <label class="mr-3">
+        From:
+        <input
+          type="date"
+          name="start_date"
+          value="{{ start }}"
+          class="form-control ml-2"
+        >
+      </label>
+
+      <label class="mr-3">
+        To:
+        <input
+          type="date"
+          name="end_date"
+          value="{{ end }}"
+          class="form-control ml-2"
+        >
+      </label>
+
+      <label class="mr-3">
+        Period:
+        <select
+          name="period"
+          class="form-control ml-2"
+        >
+          {% for p in ['all','morning','noon','afternoon'] %}
+          <option value="{{ p }}" {% if p == period %}selected{% endif %}>
+            {{ p.title() }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <button type="submit" class="btn btn-primary">Filter</button>
+    </form>
+
+    <!-- Results -->
+    <div class="mb-4">
       <h5>Results:</h5>
-      <ul>
-        <li>Slope: {{ result.slope if result.slope is not none else 'N/A' }}</li>
-        <li>Intercept: {{ result.intercept if result.intercept is not none else 'N/A' }}</li>
-        <li>R²: {{ result.r2 if result.r2 is not none else 'N/A' }}</li>
-      </ul>
+      <table class="table table-sm">
+        <tbody>
+          <tr>
+            <th>Slope</th>
+            <td>{{ result.slope if result.slope is not none else 'N/A' }}</td>
+          </tr>
+          <tr>
+            <th>Intercept</th>
+            <td>{{ result.intercept if result.intercept is not none else 'N/A' }}</td>
+          </tr>
+          <tr>
+            <th>R²</th>
+            <td>{{ result.r_squared if result.r_squared is not none else 'N/A' }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
+    <!-- Chart -->
     {% if chart_img %}
     <div class="mb-5">
       <h5>Data + Trend Line:</h5>
@@ -30,3 +98,10 @@
       />
     </div>
     {% endif %}
+
+    <a href="{{ url_for('main.analysis') }}" class="btn btn-link">
+      &larr; Back to Analysis
+    </a>
+  </div>
+</body>
+</html>
