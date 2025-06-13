@@ -44,10 +44,15 @@ def run_ab_test(group_by='half', param_a='1', param_b='2'):
         raw = t.get('dateTime') or t.get('date')
         if not raw:
             return None
-        if 'T' in raw:
-            raw = raw.split('T')[0]
+        # If it's already a datetime object, return it directly
+        if isinstance(raw, datetime):
+            return raw
+        # Ensure we have a full ISO timestamp
+        s = raw
+        if 'T' not in s:
+            s = f"{s}T00:00:00"
         try:
-            return datetime.fromisoformat(raw)
+            return datetime.fromisoformat(s)
         except ValueError:
             return None
 
@@ -59,6 +64,7 @@ def run_ab_test(group_by='half', param_a='1', param_b='2'):
         if not dt:
             continue
 
+        # Determine grouping key
         match group_by:
             case 'half':
                 idx = transactions.index(t)
