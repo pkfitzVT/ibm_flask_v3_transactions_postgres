@@ -65,27 +65,27 @@ def run_ab_test(group_by='half', param_a='1', param_b='2'):
             continue
 
         # Determine grouping key
-        match group_by:
-            case 'half':
-                idx = transactions.index(t)
-                mid = len(transactions) // 2
-                txn_group = '1' if idx < mid else '2'
-            case 'weekday':
-                txn_group = str(dt.weekday())
-            case 'time':
-                h = dt.hour
-                if 6 <= h <= 11:
-                    txn_group = 'morning'
-                elif 12 <= h <= 17:
-                    txn_group = 'afternoon'
-                elif 18 <= h <= 23:
-                    txn_group = 'evening'
-                else:
-                    txn_group = 'night'
-            case 'month':
-                txn_group = str(dt.month)
-            case _:
-                continue
+        # Determine grouping key
+        if group_by == 'half':
+            idx = transactions.index(t)
+            mid = len(transactions) // 2
+            txn_group = '1' if idx < mid else '2'
+        elif group_by == 'weekday':
+            txn_group = str(dt.weekday())
+        elif group_by == 'time':
+            h = dt.hour
+            if 6 <= h <= 11:
+                txn_group = 'morning'
+            elif 12 <= h <= 17:
+                txn_group = 'afternoon'
+            elif 18 <= h <= 23:
+                txn_group = 'evening'
+            else:
+                txn_group = 'night'
+        elif group_by == 'month':
+            txn_group = str(dt.month)
+        else:
+            continue
 
         amt = t.get('amount', 0)
         if txn_group == param_a:

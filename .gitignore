@@ -52,3 +52,6 @@ instance/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Environment variables file (if used)
+.env
