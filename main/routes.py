@@ -28,22 +28,29 @@ def get_transactions():
                            transactions=transactions,
                            total_amount=total)
 
-@main_bp.route('/add', methods=['GET','POST'])
+@main_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_transaction():
     if request.method == 'POST':
         try:
-            date_str = request.form['date']
-            dt = datetime.strptime(date_str, '%Y-%m-%d')
+            # Read the full date+time from the form (e.g. "2025-06-13T09:00")
+            dt_str = request.form['dateTime']
+            dt = datetime.fromisoformat(dt_str)
+
             amt = float(request.form['amount'])
+
             transactions.append({
                 'id': len(transactions) + 1,
-                'date': dt.strftime('%Y-%m-%d'),
+                # Match your other entries' format: "YYYY-MM-DD HH:MM:SS"
+                'date': dt.strftime('%Y-%m-%d %H:%M:%S'),
                 'amount': amt
             })
+
             return redirect(url_for('main.get_transactions'))
-        except ValueError:
+
+        except (ValueError, KeyError):
             return "Invalid input", 400
+
     return render_template('form.html')
 
 @main_bp.route('/edit/<int:transaction_id>', methods=['GET','POST'])

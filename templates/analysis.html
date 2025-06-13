@@ -4,63 +4,118 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Analysis Dashboard</title>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet"
+        href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
+  <style>
+    body {
+      background: linear-gradient(to right, #f6d365, #fda085);
+      color: #333;
+    }
+    .page-card {
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: white;
+      border: 2px solid #f6d365;
+      border-radius: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+  </style>
 </head>
-<body class="p-4">
-  <h1>Data Analysis</h1>
+<body>
+  <div class="page-card">
+    <h1 class="mb-4">Data Analysis</h1>
 
-  <ul class="list-unstyled">
-    <li class="mb-3">
+    <div class="mb-4">
       <a href="{{ url_for('main.regression') }}" class="btn btn-primary">
         Regression Analysis
       </a>
-    </li>
+    </div>
 
-    <li>
-      <form method="get" action="{{ url_for('main.abtest_api') }}" class="form-inline">
-        <label class="mr-2">Group by:</label>
-        <select name="group_by" class="form-control mr-3">
-          <option value="half">First/Second Half</option>
-          <option value="weekday">Weekday vs. Weekend</option>
-          <option value="timeofday">Time of Day</option>
-          <option value="month">Month</option>
-        </select>
+    <form method="get" action="{{ url_for('main.abtest_api') }}"
+          class="form-inline mb-4">
+      <label class="mr-2" for="group_by">Group by:</label>
+      <select name="group_by" id="group_by" class="form-control mr-3">
+        <option value="half"    {% if group_by=='half' %}selected{% endif %}>
+          First/Second Half
+        </option>
+        <option value="weekday" {% if group_by=='weekday' %}selected{% endif %}>
+          Weekday vs. Weekend
+        </option>
+        <option value="timeofday"
+                {% if group_by=='timeofday' %}selected{% endif %}>
+          Time of Day
+        </option>
+        <option value="month"   {% if group_by=='month' %}selected{% endif %}>
+          Month
+        </option>
+      </select>
 
-        <label class="mr-2">Param A:</label>
-        <select name="paramA" class="form-control mr-3">
-          <optgroup label="Time of Day">
-            <option value="morning">Morning (6–11)</option>
-            <option value="afternoon">Afternoon (12–17)</option>
-            <option value="evening">Evening (18–23)</option>
-            <option value="night">Night (0–5)</option>
-          </optgroup>
-          <optgroup label="Month">
-            {% for m in range(1,13) %}
-              <option value="{{ m }}">{{ m }}</option>
-            {% endfor %}
-          </optgroup>
-        </select>
+      <label class="mr-2" for="paramA">Param A:</label>
+      <select name="paramA" id="paramA" class="form-control mr-3">
+        <optgroup label="Time of Day">
+          <option value="morning"
+                  {% if paramA=='morning' %}selected{% endif %}>
+            Morning (6–11)
+          </option>
+          <option value="afternoon"
+                  {% if paramA=='afternoon' %}selected{% endif %}>
+            Afternoon (12–17)
+          </option>
+          <option value="evening"
+                  {% if paramA=='evening' %}selected{% endif %}>
+            Evening (18–23)
+          </option>
+          <option value="night"
+                  {% if paramA=='night' %}selected{% endif %}>
+            Night (0–5)
+          </option>
+        </optgroup>
+        <optgroup label="Month">
+          {% for m in range(1,13) %}
+            <option value="{{ m }}"
+                    {% if paramA==m|string %}selected{% endif %}>
+              {{ m }}
+            </option>
+          {% endfor %}
+        </optgroup>
+      </select>
 
-        <label class="mr-2">Param B:</label>
-        <select name="paramB" class="form-control mr-3">
-          <optgroup label="Time of Day">
-            <option value="morning">Morning (6–11)</option>
-            <option value="afternoon">Afternoon (12–17)</option>
-            <option value="evening">Evening (18–23)</option>
-            <option value="night">Night (0–5)</option>
-          </optgroup>
-          <optgroup label="Month">
-            {% for m in range(1,13) %}
-              <option value="{{ m }}">{{ m }}</option>
-            {% endfor %}
-          </optgroup>
-        </select>
+      <label class="mr-2" for="paramB">Param B:</label>
+      <select name="paramB" id="paramB" class="form-control mr-3">
+        <optgroup label="Time of Day">
+          <option value="morning"
+                  {% if paramB=='morning' %}selected{% endif %}>
+            Morning (6–11)
+          </option>
+          <option value="afternoon"
+                  {% if paramB=='afternoon' %}selected{% endif %}>
+            Afternoon (12–17)
+          </option>
+          <option value="evening"
+                  {% if paramB=='evening' %}selected{% endif %}>
+            Evening (18–23)
+          </option>
+          <option value="night"
+                  {% if paramB=='night' %}selected{% endif %}>
+            Night (0–5)
+          </option>
+        </optgroup>
+        <optgroup label="Month">
+          {% for m in range(1,13) %}
+            <option value="{{ m }}"
+                    {% if paramB==m|string %}selected{% endif %}>
+              {{ m }}
+            </option>
+          {% endfor %}
+        </optgroup>
+      </select>
 
-        <button type="submit" class="btn btn-secondary">Run A/B Test</button>
-      </form>
-    </li>
-  </ul>
+      <button type="submit" class="btn btn-secondary">Run A/B Test</button>
+    </form>
 
-  <a href="{{ url_for('main.get_transactions') }}">← Back to Transactions</a>
+    <a href="{{ url_for('main.get_transactions') }}">&larr; Back to Transactions</a>
+  </div>
 </body>
 </html>
