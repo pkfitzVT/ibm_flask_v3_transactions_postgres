@@ -90,10 +90,8 @@ def list_transactions():
             if 'date' in copy_t:
                 original = copy_t['date']
                 if isinstance(original, datetime):
-                    # Use ISO format for JS Date parsing
                     copy_t['dateTime'] = original.isoformat()
                 else:
-                    # Legacy date string 'YYYY-MM-DD'
                     copy_t['dateTime'] = f"{original}T00:00:00"
             else:
                 copy_t['dateTime'] = None
@@ -190,10 +188,15 @@ def api_regression():
         raw = t.get('dateTime') or t.get('date')
         if not raw:
             continue
-        try:
-            dt = datetime.fromisoformat(raw)
-        except ValueError:
-            continue
+        # Handle both datetime objects and ISO strings
+        if isinstance(raw, datetime):
+            dt = raw
+        else:
+            s = raw if 'T' in raw else f"{raw}T00:00:00"
+            try:
+                dt = datetime.fromisoformat(s)
+            except ValueError:
+                continue
 
         if start_dt and dt < start_dt:
             continue
@@ -202,7 +205,7 @@ def api_regression():
         if hours    and dt.hour not in hours:
             continue
 
-        pairs.append((dt, float(t['amount'])))
+        pairs.append((dt, float(t['amount'])) )
 
     if not pairs:
         return jsonify({'slope': None, 'intercept': None, 'r_squared': None, 'chart_img': None}), 200
