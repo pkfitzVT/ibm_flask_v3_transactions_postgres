@@ -76,7 +76,6 @@ def api_me():
         return jsonify({'error': 'Not found'}), 404
     return jsonify({'id': user['id'], 'email': user['email']}), 200
 
-
 # --- Transactions endpoints with full datetime support and unique IDs ---
 
 @api_bp.route('/transactions', methods=['GET'])
@@ -89,7 +88,13 @@ def list_transactions():
         # Backfill dateTime if not present
         if 'dateTime' not in copy_t:
             if 'date' in copy_t:
-                copy_t['dateTime'] = f"{copy_t['date']}T00:00"
+                original = copy_t['date']
+                if isinstance(original, datetime):
+                    # Use ISO format for JS Date parsing
+                    copy_t['dateTime'] = original.isoformat()
+                else:
+                    # Legacy date string 'YYYY-MM-DD'
+                    copy_t['dateTime'] = f"{original}T00:00:00"
             else:
                 copy_t['dateTime'] = None
         payload.append(copy_t)
@@ -136,7 +141,6 @@ def delete_transaction(txn_id):
     global transactions
     transactions = [t for t in transactions if t['id'] != txn_id]
     return jsonify({'message': 'Deleted'}), 200
-
 
 # --- New Analysis endpoints (JSON only) ---
 
@@ -186,12 +190,8 @@ def api_regression():
         raw = t.get('dateTime') or t.get('date')
         if not raw:
             continue
-        if 'T' in raw:
-            raw_date = raw
-        else:
-            raw_date = raw
         try:
-            dt = datetime.fromisoformat(raw_date)
+            dt = datetime.fromisoformat(raw)
         except ValueError:
             continue
 
