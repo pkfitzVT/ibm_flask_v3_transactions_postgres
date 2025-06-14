@@ -3,6 +3,11 @@ Seed the `transactions` table with demo data from `data.py` under a single demo 
 Usage:
     python seed.py
 """
+
+from dotenv import load_dotenv
+
+load_dotenv()  # <-- this will read your .env into os.environ
+
 from werkzeug.security import generate_password_hash
 
 from app import create_app
@@ -14,6 +19,7 @@ from models import Transaction, User
 def seed():
     app = create_app()
     with app.app_context():
+        db.create_all()
         # 1) Create or fetch demo user
         demo_user = User.query.filter_by(name="demo_user").first()
         if not demo_user:

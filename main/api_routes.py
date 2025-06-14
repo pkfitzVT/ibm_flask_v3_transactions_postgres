@@ -15,6 +15,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from auth.routes import users
 from auth.utils import login_required
+from extensions import db
+from models import User
 
 from .data import transactions
 from .stats.abtest import run_ab_test
@@ -33,39 +35,43 @@ CORS(
 
 @api_bp.route("/register", methods=["POST"])
 def api_register():
-    try:
-        data = request.get_json(force=True) or {}
-        current_app.logger.debug(f"Register payload: {data!r}")
+    data = request.get_json(force=True) or {}
+    email = data.get("email")
+    pwd = data.get("password")
 
-        email = data.get("email")
-        pwd = data.get("password")
-        if not email or not pwd:
-            return jsonify({"error": "Missing email or password"}), 400
+    # 1) Validate inputs
+    if not email or not pwd:
+        return jsonify({"error": "Missing email or password"}), 400
 
-        if any(u["email"] == email for u in users):
-            return jsonify({"error": "Email already registered"}), 400
+    # 2) Check for existing user in the DB
+    if User.query.filter_by(name=email).first():
+        return jsonify({"error": "Email already registered"}), 400
 
-        pw_hash = generate_password_hash(pwd)
-        new_user = {"id": len(users) + 1, "email": email, "pw_hash": pw_hash}
-        users.append(new_user)
+    # 3) Create and persist the new user
+    new_user = User(name=email, password_hash=generate_password_hash(pwd))
+    db.session.add(new_user)
+    db.session.commit()
 
-        return jsonify({"message": "Registered successfully"}), 201
-
-    except Exception as e:
-        current_app.logger.exception("Registration failed")
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"message": "Registered successfully"}), 201
 
 
 @api_bp.route("/login", methods=["POST"])
 def api_login():
-    data = request.get_json() or {}
+    data = request.get_json(force=True) or {}
     email = data.get("email")
     pwd = data.get("password")
-    user = next((u for u in users if u["email"] == email), None)
-    if not user or not check_password_hash(user["pw_hash"], pwd):
+
+    # 1) Validate presence
+    if not email or not pwd:
+        return jsonify({"error": "Missing email or password"}), 400
+
+    # 2) Look up the user in Postgres
+    user = User.query.filter_by(name=email).first()
+    if not user or not check_password_hash(user.password_hash, pwd):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    session["user_id"] = user["id"]
+    # 3) Success — store session and return
+    session["user_id"] = user.id
     return jsonify({"message": "Logged in"}), 200
 
 
