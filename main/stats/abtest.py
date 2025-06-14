@@ -1,10 +1,13 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import io
 import base64
+import io
 from datetime import datetime
-from ..data import transactions
+
+import matplotlib.pyplot as plt
+import numpy as np
 import scipy.stats as stats
+
+from ..data import transactions
+
 
 def remove_outliers(data):
     """
@@ -19,6 +22,7 @@ def remove_outliers(data):
     upper = q3 + 1.5 * iqr
     return [float(x) for x in arr if lower <= x <= upper]
 
+
 def t_test(groupA, groupB):
     """
     Perform a two-sample t-test (unequal variance) between two lists of values.
@@ -29,7 +33,8 @@ def t_test(groupA, groupB):
     t_stat, pvalue = stats.ttest_ind(groupA, groupB, equal_var=False)
     return float(t_stat), float(pvalue)
 
-def run_ab_test(group_by='half', param_a='1', param_b='2'):
+
+def run_ab_test(group_by="half", param_a="1", param_b="2"):
     """
     Run A/B test on transactions based on selected grouping.
 
@@ -40,8 +45,9 @@ def run_ab_test(group_by='half', param_a='1', param_b='2'):
     - p_value: float
     - boxplot_img: base64 PNG
     """
+
     def parse_txn_datetime(t):
-        raw = t.get('dateTime') or t.get('date')
+        raw = t.get("dateTime") or t.get("date")
         if not raw:
             return None
         # If it's already a datetime object, return it directly
@@ -49,7 +55,7 @@ def run_ab_test(group_by='half', param_a='1', param_b='2'):
             return raw
         # Ensure we have a full ISO timestamp
         s = raw
-        if 'T' not in s:
+        if "T" not in s:
             s = f"{s}T00:00:00"
         try:
             return datetime.fromisoformat(s)
@@ -66,28 +72,28 @@ def run_ab_test(group_by='half', param_a='1', param_b='2'):
 
         # Determine grouping key
         # Determine grouping key
-        if group_by == 'half':
+        if group_by == "half":
             idx = transactions.index(t)
             mid = len(transactions) // 2
-            txn_group = '1' if idx < mid else '2'
-        elif group_by == 'weekday':
+            txn_group = "1" if idx < mid else "2"
+        elif group_by == "weekday":
             txn_group = str(dt.weekday())
-        elif group_by == 'time':
+        elif group_by == "time":
             h = dt.hour
             if 6 <= h <= 11:
-                txn_group = 'morning'
+                txn_group = "morning"
             elif 12 <= h <= 17:
-                txn_group = 'afternoon'
+                txn_group = "afternoon"
             elif 18 <= h <= 23:
-                txn_group = 'evening'
+                txn_group = "evening"
             else:
-                txn_group = 'night'
-        elif group_by == 'month':
+                txn_group = "night"
+        elif group_by == "month":
             txn_group = str(dt.month)
         else:
             continue
 
-        amt = t.get('amount', 0)
+        amt = t.get("amount", 0)
         if txn_group == param_a:
             groupA.append(amt)
         elif txn_group == param_b:
@@ -100,21 +106,21 @@ def run_ab_test(group_by='half', param_a='1', param_b='2'):
     t_stat, p_val = t_test(groupA_clean, groupB_clean)
 
     # Create boxplot
-    plt.figure(figsize=(6,4))
-    plt.boxplot([groupA_clean, groupB_clean], labels=['Group A','Group B'])
+    plt.figure(figsize=(6, 4))
+    plt.boxplot([groupA_clean, groupB_clean], labels=["Group A", "Group B"])
     plt.title(f"A/B Test — {group_by}: {param_a} vs {param_b}")
     plt.tight_layout()
 
     buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    plt.savefig(buf, format="png")
     plt.close()
     buf.seek(0)
-    boxplot_b64 = base64.b64encode(buf.read()).decode('ascii')
+    boxplot_b64 = base64.b64encode(buf.read()).decode("ascii")
 
     return {
-        'groupA':      groupA_clean,
-        'groupB':      groupB_clean,
-        't_score':     t_stat,
-        'p_value':     p_val,
-        'boxplot_img': boxplot_b64
+        "groupA": groupA_clean,
+        "groupB": groupB_clean,
+        "t_score": t_stat,
+        "p_value": p_val,
+        "boxplot_img": boxplot_b64,
     }

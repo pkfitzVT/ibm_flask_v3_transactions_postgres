@@ -1,7 +1,9 @@
 # auth/utils.py
 
-from flask import current_app, session, redirect, url_for
 from functools import wraps
+
+from flask import current_app, redirect, session, url_for
+
 
 def check_credentials(email: str, password: str):
     """
@@ -14,13 +16,16 @@ def check_credentials(email: str, password: str):
         return type("User", (), {"id": 1, "role": "admin"})()
     return None
 
+
 def login_required(view):
     """
     Decorator that redirects to the login page if no user_id in session.
     """
+
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not session.get("user_id"):
             return redirect(url_for("auth.login"))
         return view(*args, **kwargs)
+
     return wrapped
