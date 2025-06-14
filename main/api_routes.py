@@ -1,7 +1,11 @@
+# flake8: noqa: E402
 import base64
 import io
 from datetime import datetime
 
+import matplotlib
+
+matplotlib.use("Agg")  # add this BEFORE any pyplot import
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
