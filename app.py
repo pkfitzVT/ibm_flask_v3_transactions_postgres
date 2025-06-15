@@ -1,47 +1,73 @@
 # app.py
+import os
 
 from flask import Flask
 from flask_cors import CORS
 
-# 2) import models so Flask-Migrate knows about them
-#    (we suppress only the 'unused import' warning here)
 import models  # noqa: F401
-
-# 3) import blueprints
 from auth.routes import auth_bp
-
-# 1) import your extensions
 from extensions import db, migrate
 from main.api_routes import api_bp
 from main.routes import main_bp
 
+# Pytest sets this env var while running tests; we use it to skip the guard
+PYTEST_ENV_VAR = "PYTEST_CURRENT_TEST"
 
-def create_app():
+
+def create_app() -> Flask:
+    """Application factory."""
     app = Flask(__name__)
 
-    # 4) load config (SECRET_KEY, SQLALCHEMY_DATABASE_URI via .env/config.py)
+    # 1) config
     app.config.from_pyfile("config.py")
 
-    # 5) initialize your extensions
+    # 2) init extensions so db.engine exists
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # 6) apply CORS
+    # 3) SAFETY GUARD – block destructive ops on Postgres outside tests
+    guard_needed = (
+        not app.config.get("TESTING", False)
+        and not os.getenv(PYTEST_ENV_VAR)
+        and app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql://")
+    )
+    if guard_needed:
+        with app.app_context():
+            from sqlalchemy import inspect
+
+            inspector = inspect(db.engine)
+            required = {"users", "transactions"}
+            missing = required.difference(inspector.get_table_names())
+            if missing:
+                missing_csv = ", ".join(sorted(missing))
+                raise RuntimeError(
+                    "Postgres schema missing tables: "
+                    f"{missing_csv}. Run `flask db upgrade`."
+                )
+
+    # 4) CORS
     CORS(
         app,
         supports_credentials=True,
         resources={
             r"/api/*": {
                 "origins": "http://localhost:3000",
-                "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+                "methods": [
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "OPTIONS",
+                ],
             }
         },
     )
 
-    # 7) register your blueprints
-    app.register_blueprint(auth_bp)  # mounts /auth routes
-    app.register_blueprint(main_bp)  # mounts /, /add, /edit, /transactions
-    app.register_blueprint(api_bp)  # mounts /api/*
+    # 5) blueprints
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(main_bp)
+    app.register_blueprint(api_bp)
 
     return app
 
