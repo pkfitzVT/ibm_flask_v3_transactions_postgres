@@ -1,4 +1,5 @@
-# flake8: noqa
+# tests/test_auth.py
+
 from werkzeug.security import generate_password_hash
 
 from extensions import db
@@ -6,7 +7,9 @@ from models import User
 
 
 def seed_demo_user(app):
-    """Helper to setup a fresh DB with a single demo_user."""
+    """
+    Helper to setup a fresh DB with a single demo_user.
+    """
     with app.app_context():
         db.drop_all()
         db.create_all()

@@ -1,3 +1,13 @@
 [flake8]
 max-line-length = 88
 extend-ignore = E203, W503
+
+# Skip generated or special files entirely
+exclude =
+    migrations/,
+    sql/,
+    seed.py
+
+# For this one test helper, ignore only these specific checks
+per-file-ignores =
+    tests/conftest.py: E402, F401

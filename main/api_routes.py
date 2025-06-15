@@ -1,11 +1,10 @@
-# flake8: noqa: E402
+# main/api_routes.py
+
 import base64
 import io
 from datetime import datetime
 
 import matplotlib
-
-matplotlib.use("Agg")  # add this BEFORE any pyplot import
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +20,10 @@ from models import User
 from .data import transactions
 from .stats.abtest import run_ab_test
 from .stats.regression import compute_regression  # import your stat function
+
+# Move the Agg backend setup *after* all imports
+matplotlib.use("Agg")
+
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 CORS(
@@ -99,22 +102,18 @@ def api_me():
 @api_bp.route("/transactions", methods=["GET"])
 @login_required
 def list_transactions():
-    # Build a fresh payload to avoid mutating the global transactions list
     payload = []
     for t in transactions:
         copy_t = t.copy()
-        # Backfill dateTime if not present
         if "dateTime" not in copy_t:
-            if "date" in copy_t:
-                original = copy_t["date"]
-                if isinstance(original, datetime):
-                    copy_t["dateTime"] = original.isoformat()
-                else:
-                    copy_t["dateTime"] = f"{original}T00:00:00"
+            original = copy_t.get("date")
+            if isinstance(original, datetime):
+                copy_t["dateTime"] = original.isoformat()
+            elif original:
+                copy_t["dateTime"] = f"{original}T00:00:00"
             else:
                 copy_t["dateTime"] = None
         payload.append(copy_t)
-
     return jsonify(payload), 200
 
 
@@ -174,16 +173,12 @@ def api_ab_test():
             group_by = data.get("group_by")
             param_a = data.get("param_a")
             param_b = data.get("param_b")
-
             if not group_by or not param_a or not param_b:
                 return jsonify({"error": "Missing parameters"}), 400
-
             result = run_ab_test(group_by, param_a, param_b)
         else:
             result = run_ab_test()
-
         return jsonify(result), 200
-
     except Exception as e:
         current_app.logger.exception("Error running A/B test")
         return jsonify({"error": str(e)}), 500
@@ -193,14 +188,15 @@ def api_ab_test():
 @login_required
 def api_regression():
     period = request.args.get("period", "all").lower()
-    if period == "morning":
-        hours = list(range(0, 12))
-    elif period == "noon":
-        hours = [12]
-    elif period == "afternoon":
-        hours = list(range(13, 18))
-    else:
-        hours = None
+    hours = (
+        list(range(0, 12))
+        if period == "morning"
+        else [12]
+        if period == "noon"
+        else list(range(13, 18))
+        if period == "afternoon"
+        else None
+    )
 
     start_str = request.args.get("start_date")
     end_str = request.args.get("end_date")
@@ -212,7 +208,6 @@ def api_regression():
         raw = t.get("dateTime") or t.get("date")
         if not raw:
             continue
-        # Handle both datetime objects and ISO strings
         if isinstance(raw, datetime):
             dt = raw
         else:
@@ -252,7 +247,7 @@ def api_regression():
 
     xs_ts = np.array([d.timestamp() for d in dates])
     y_pred = intercept + slope * xs_ts
-    ax.plot(dates, y_pred, "r-", linewidth=2, label="Trend")
+    ax.plot(dates, y_pred, linewidth=2, label="Trend")
 
     locator = mdates.AutoDateLocator()
     formatter = mdates.ConciseDateFormatter(locator)

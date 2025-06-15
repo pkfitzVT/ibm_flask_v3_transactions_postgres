@@ -1,21 +1,23 @@
-# flake8: noqa: E402, F401
+# tests/conftest.py
+
 import os
 import sys
+
+# Ensure project root is on the import path before other imports
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
-# Ensure project root is on the import path
-top = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if top not in sys.path:
-    sys.path.insert(0, top)
-
-from app import create_app
-from extensions import db
-from models import User
+from app import create_app  # noqa: E402
+from extensions import db  # noqa: E402
+from models import User  # noqa: F401, E402
 
 # Testing configuration: in-memory SQLite for fast, isolated tests
+
 test_config = {
     "TESTING": True,
     "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
@@ -32,7 +34,6 @@ def app():
     app = create_app()
     app.config.update(test_config)
     with app.app_context():
-        # Reset database state on each test session
         db.drop_all()
         db.create_all()
         # Seed a demo user for authentication
