@@ -1,9 +1,7 @@
-# tests/conftest.py
-
 import os
 import sys
 
-# Ensure project root is on the import path before other imports
+# Ensure project root is on the import path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -12,12 +10,11 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
-from app import create_app  # noqa: E402
-from extensions import db  # noqa: E402
-from models import User  # noqa: F401, E402
+from app import create_app
+from extensions import db
+from models import User
 
 # Testing configuration: in-memory SQLite for fast, isolated tests
-
 test_config = {
     "TESTING": True,
     "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
@@ -32,8 +29,19 @@ def app():
     Create and configure a new Flask app instance for testing.
     """
     app = create_app()
+
+    # Override config for testing
     app.config.update(test_config)
+
+    # Safety check: prevent running tests against Postgres
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if uri.startswith("postgresql://"):
+        raise RuntimeError(
+            "Tests are pointed at Postgres! Aborting to avoid data loss."
+        )
+
     with app.app_context():
+        # Reset database state on each test session
         db.drop_all()
         db.create_all()
         # Seed a demo user for authentication
@@ -46,6 +54,7 @@ def app():
         except IntegrityError:
             db.session.rollback()
     yield app
+
     # Teardown: drop all tables after tests complete
     with app.app_context():
         db.drop_all()

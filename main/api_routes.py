@@ -1,5 +1,3 @@
-# main/api_routes.py
-
 import base64
 import io
 from datetime import datetime
@@ -15,15 +13,14 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from auth.routes import users
 from auth.utils import login_required
 from extensions import db
-from models import User
+from models import Transaction, User
 
 from .data import transactions
 from .stats.abtest import run_ab_test
-from .stats.regression import compute_regression  # import your stat function
+from .stats.regression import compute_regression
 
-# Move the Agg backend setup *after* all imports
+# Configure matplotlib backend after imports
 matplotlib.use("Agg")
-
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 CORS(
@@ -41,20 +38,13 @@ def api_register():
     data = request.get_json(force=True) or {}
     email = data.get("email")
     pwd = data.get("password")
-
-    # 1) Validate inputs
     if not email or not pwd:
         return jsonify({"error": "Missing email or password"}), 400
-
-    # 2) Check for existing user in the DB
     if User.query.filter_by(name=email).first():
         return jsonify({"error": "Email already registered"}), 400
-
-    # 3) Create and persist the new user
     new_user = User(name=email, password_hash=generate_password_hash(pwd))
     db.session.add(new_user)
     db.session.commit()
-
     return jsonify({"message": "Registered successfully"}), 201
 
 
@@ -63,17 +53,11 @@ def api_login():
     data = request.get_json(force=True) or {}
     email = data.get("email")
     pwd = data.get("password")
-
-    # 1) Validate presence
     if not email or not pwd:
         return jsonify({"error": "Missing email or password"}), 400
-
-    # 2) Look up the user in Postgres
     user = User.query.filter_by(name=email).first()
     if not user or not check_password_hash(user.password_hash, pwd):
         return jsonify({"error": "Invalid credentials"}), 401
-
-    # 3) Success — store session and return
     session["user_id"] = user.id
     return jsonify({"message": "Logged in"}), 200
 
@@ -96,7 +80,7 @@ def api_me():
     return jsonify({"id": user["id"], "email": user["email"]}), 200
 
 
-# --- Transactions endpoints with full datetime support and unique IDs ---
+# --- Transactions endpoints ---
 
 
 @api_bp.route("/transactions", methods=["GET"])
@@ -138,30 +122,42 @@ def create_transaction():
 @api_bp.route("/transactions/<int:txn_id>", methods=["PUT", "PATCH"])
 @login_required
 def update_transaction(txn_id):
-    try:
-        data = request.get_json() or {}
-        txn = next((t for t in transactions if t["id"] == txn_id), None)
-        if not txn:
-            return jsonify({"error": "Not found"}), 404
-        if "dateTime" in data:
-            txn["dateTime"] = data["dateTime"]
-        if "amount" in data:
-            txn["amount"] = data["amount"]
-        return jsonify(txn), 200
-    except Exception:
-        current_app.logger.exception("Error updating transaction")
-        return jsonify({"error": "Internal server error"}), 500
+    data = request.get_json(force=True) or {}
+    txn = Transaction.query.get(txn_id)
+    if not txn:
+        return jsonify({"error": "Not found"}), 404
+    if "dateTime" in data:
+        try:
+            txn.date_time = datetime.fromisoformat(data["dateTime"])
+        except ValueError:
+            return jsonify({"error": "Invalid dateTime format"}), 400
+    if "amount" in data:
+        txn.amount = float(data["amount"])
+    db.session.commit()
+    return (
+        jsonify(
+            {
+                "id": txn.id,
+                "dateTime": txn.date_time.isoformat(),
+                "amount": float(txn.amount),
+            }
+        ),
+        200,
+    )
 
 
 @api_bp.route("/transactions/<int:txn_id>", methods=["DELETE"])
 @login_required
 def delete_transaction(txn_id):
-    global transactions
-    transactions = [t for t in transactions if t["id"] != txn_id]
+    txn = Transaction.query.get(txn_id)
+    if not txn:
+        return jsonify({"error": "Not found"}), 404
+    db.session.delete(txn)
+    db.session.commit()
     return jsonify({"message": "Deleted"}), 200
 
 
-# --- New Analysis endpoints (JSON only) ---
+# --- Analysis endpoints ---
 
 
 @api_bp.route("/analysis/abtest", methods=["GET", "POST"])
@@ -188,15 +184,14 @@ def api_ab_test():
 @login_required
 def api_regression():
     period = request.args.get("period", "all").lower()
-    hours = (
-        list(range(0, 12))
-        if period == "morning"
-        else [12]
-        if period == "noon"
-        else list(range(13, 18))
-        if period == "afternoon"
-        else None
-    )
+    if period == "morning":
+        hours = list(range(0, 12))
+    elif period == "noon":
+        hours = [12]
+    elif period == "afternoon":
+        hours = list(range(13, 18))
+    else:
+        hours = None
 
     start_str = request.args.get("start_date")
     end_str = request.args.get("end_date")
@@ -208,22 +203,17 @@ def api_regression():
         raw = t.get("dateTime") or t.get("date")
         if not raw:
             continue
-        if isinstance(raw, datetime):
-            dt = raw
-        else:
-            s = raw if "T" in raw else f"{raw}T00:00:00"
-            try:
-                dt = datetime.fromisoformat(s)
-            except ValueError:
-                continue
-
-        if start_dt and dt < start_dt:
+        dt = (
+            raw
+            if isinstance(raw, datetime)
+            else datetime.fromisoformat(raw if "T" in raw else f"{raw}T00:00:00")
+        )
+        if (
+            (start_dt and dt < start_dt)
+            or (end_dt and dt > end_dt)
+            or (hours and dt.hour not in hours)
+        ):
             continue
-        if end_dt and dt > end_dt:
-            continue
-        if hours and dt.hour not in hours:
-            continue
-
         pairs.append((dt, float(t["amount"])))
 
     if not pairs:
@@ -234,27 +224,21 @@ def api_regression():
             200,
         )
 
-    ts_amounts = [(dt.timestamp(), amt) for dt, amt in pairs]
-    stats = compute_regression(ts_amounts)
-    slope = stats["slope"]
-    intercept = stats["intercept"]
-    r2 = stats["r_squared"]
+    ts_amounts = [(d.timestamp(), a) for d, a in pairs]
+    slope, intercept, r_val, p_val, std_err = compute_regression(ts_amounts)
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    dates = [dt for dt, _ in pairs]
-    amounts = [amt for _, amt in pairs]
+    dates = [d for d, _ in pairs]
+    amounts = [a for _, a in pairs]
     ax.scatter(dates, amounts, alpha=0.6, label="Data")
-
     xs_ts = np.array([d.timestamp() for d in dates])
-    y_pred = intercept + slope * xs_ts
-    ax.plot(dates, y_pred, linewidth=2, label="Trend")
+    ax.plot(dates, intercept + slope * xs_ts, linewidth=2, label="Trend")
 
     locator = mdates.AutoDateLocator()
     formatter = mdates.ConciseDateFormatter(locator)
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
     fig.autofmt_xdate()
-
     ax.set_title("Regression Analysis")
     ax.set_ylabel("Amount")
     ax.legend()
@@ -264,13 +248,12 @@ def api_regression():
     plt.close(fig)
     buf.seek(0)
     chart_b64 = base64.b64encode(buf.read()).decode("ascii")
-
     return (
         jsonify(
             {
                 "slope": float(slope),
                 "intercept": float(intercept),
-                "r_squared": float(r2),
+                "r_squared": float(r_val**2),
                 "chart_img": chart_b64,
             }
         ),

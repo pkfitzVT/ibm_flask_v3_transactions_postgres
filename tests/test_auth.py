@@ -13,10 +13,10 @@ def seed_demo_user(app):
     with app.app_context():
         db.drop_all()
         db.create_all()
-        demo = User(
+        demo_user = User(
             name="demo_user", password_hash=generate_password_hash("password123")
         )
-        db.session.add(demo)
+        db.session.add(demo_user)
         db.session.commit()
 
 

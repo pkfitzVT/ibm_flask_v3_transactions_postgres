@@ -4,7 +4,7 @@ from flask import Flask
 from flask_cors import CORS
 
 # 2) import models so Flask-Migrate knows about them
-#    (we suppress only the “unused import” warning here)
+#    (we suppress only the 'unused import' warning here)
 import models  # noqa: F401
 
 # 3) import blueprints
