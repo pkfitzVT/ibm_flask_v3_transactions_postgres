@@ -75,3 +75,39 @@ def test_api_update_nonexistent_transaction(client, app):
     resp = client.put("/api/transactions/9999", json={"amount": 200})
     assert resp.status_code == 404
     assert "error" in resp.get_json()
+
+
+def test_api_create_transaction(client, app):
+    """
+    Creating a new transaction via POST should return 201 with the new payload
+    and persist it to the database.
+    """
+    # 1) Seed demo user (no transactions yet)
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+        user = User(name="demo_user", password_hash=generate_password_hash("pass"))
+        db.session.add(user)
+        db.session.commit()
+
+    # 2) Log in
+    resp = client.post("/api/login", json={"email": "demo_user", "password": "pass"})
+    assert resp.status_code == 200
+
+    # 3) POST a new transaction
+    payload = {"dateTime": "2025-07-01T10:15:00", "amount": 42.50}
+    resp = client.post("/api/transactions", json=payload)
+
+    # 4) It should 201 and return id, dateTime, amount
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert "id" in data
+    assert data["dateTime"] == payload["dateTime"]
+    assert data["amount"] == payload["amount"]
+
+    # 5) And the row should actually be in Postgres/SQLite
+    with app.app_context():
+        txn = Transaction.query.get(data["id"])
+        assert txn is not None
+        assert txn.amount == payload["amount"]
+        assert txn.date_time.isoformat() == payload["dateTime"]
