@@ -10,7 +10,6 @@ from flask import Blueprint, current_app, jsonify, request, session
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from auth.routes import users
 from auth.utils import login_required
 from extensions import db
 from models import Transaction, User
@@ -18,7 +17,7 @@ from models import Transaction, User
 from .stats import abtest
 from .stats.regression import compute_regression
 
-# Configure matplotlib backend after imports
+# Configure matplotlib backend
 matplotlib.use("Agg")
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -73,13 +72,13 @@ def api_me():
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    user = next((u for u in users if u["id"] == user_id), None)
-    if not user:
-        return jsonify({"error": "Not found"}), 404
-    return jsonify({"id": user["id"], "email": user["email"]}), 200
+    # Optionally return minimal user info
+    return jsonify({"id": user_id}), 200
 
 
-# --- Transactions endpoints ---
+# --- Transaction endpoints ---
+
+
 @api_bp.route("/transactions", methods=["POST"])
 @login_required
 def create_transaction():
@@ -87,33 +86,29 @@ def create_transaction():
     dt_str = data.get("dateTime")
     amt = data.get("amount")
 
-    # 1) Validate presence
     if not dt_str or amt is None:
         return jsonify({"error": "Missing dateTime or amount"}), 400
 
-    # 2) Parse
     try:
         dt_val = datetime.fromisoformat(dt_str)
         amount_val = float(amt)
     except ValueError:
         return jsonify({"error": "Invalid dateTime or amount format"}), 400
 
-    # 3) Persist
     txn = Transaction(
-        user_id=session["user_id"],
         date_time=dt_val,
         amount=amount_val,
     )
     db.session.add(txn)
     db.session.commit()
 
-    # 4) Return with amount as a number, not a string
     return (
         jsonify(
             {
                 "id": txn.id,
                 "dateTime": txn.date_time.isoformat(),
-                "amount": float(txn.amount),  # <— here
+                "amount": float(txn.amount),
+                "description": getattr(txn, "description", None),
             }
         ),
         201,
@@ -123,18 +118,17 @@ def create_transaction():
 @api_bp.route("/transactions", methods=["GET"])
 @login_required
 def list_transactions():
+    txns = Transaction.query.all()
     payload = []
-    for t in Transaction.query.all():
-        copy_t = t.copy()
-        if "dateTime" not in copy_t:
-            original = copy_t.get("date")
-            if isinstance(original, datetime):
-                copy_t["dateTime"] = original.isoformat()
-            elif original:
-                copy_t["dateTime"] = f"{original}T00:00:00"
-            else:
-                copy_t["dateTime"] = None
-        payload.append(copy_t)
+    for t in txns:
+        payload.append(
+            {
+                "id": t.id,
+                "dateTime": t.date_time.isoformat(),
+                "amount": float(t.amount),
+                "description": getattr(t, "description", None),
+            }
+        )
     return jsonify(payload), 200
 
 
@@ -159,6 +153,7 @@ def update_transaction(txn_id):
                 "id": txn.id,
                 "dateTime": txn.date_time.isoformat(),
                 "amount": float(txn.amount),
+                "description": getattr(txn, "description", None),
             }
         ),
         200,
@@ -183,36 +178,19 @@ def delete_transaction(txn_id):
 @login_required
 def api_ab_test():
     """
-    A/B test endpoint:
-      - GET returns default A/B test results
-      - POST accepts JSON { group_by, param_a, param_b } for custom test
-    Response JSON: {
-      "groupA": [...],
-      "groupB": [...],
-      "p_value": float or None,
-      "boxplot_img": base64-string
-    }
+    A/B test endpoint over all transactions.
     """
     try:
-        # 1) Fetch this user's transactions from the database
-        user_id = session.get("user_id")
-        txns = Transaction.query.filter_by(user_id=user_id).all()
-
-        # 2) Build the flat dicts that run_ab_test() expects
+        txns = Transaction.query.all()
         records = [
             {
                 "dateTime": t.date_time.isoformat(),
-                # include any grouping field your tests expect:
-                "description": t.description,
+                "description": getattr(t, "description", None),
                 "amount": float(t.amount),
             }
             for t in txns
         ]
-
-        # 3) Monkey-patch the A/B-test module so run_ab_test() sees YOUR data
         abtest.transactions = records
-
-        # 4) Call run_ab_test() (GET uses defaults; POST can override via JSON)
         if request.method == "POST":
             params = request.get_json(force=True) or {}
             result = abtest.run_ab_test(
@@ -222,9 +200,7 @@ def api_ab_test():
             )
         else:
             result = abtest.run_ab_test()
-
         return jsonify(result), 200
-
     except Exception as e:
         current_app.logger.exception("Error running A/B test")
         return jsonify({"error": str(e)}), 500
@@ -234,11 +210,8 @@ def api_ab_test():
 @login_required
 def api_regression():
     """
-    Regression endpoint:
-      - GET returns slope, intercept, r_squared, chart_img
-      - Operates over all transactions (no user_id filter)
+    Regression endpoint over all transactions.
     """
-    # 1) Time-of-day filter
     period = request.args.get("period", "all").lower()
     if period == "morning":
         hours = range(0, 12)
@@ -249,7 +222,6 @@ def api_regression():
     else:
         hours = None
 
-    # 2) Date-range filters
     start_str = request.args.get("start_date")
     end_str = request.args.get("end_date")
     try:
@@ -258,10 +230,7 @@ def api_regression():
     except ValueError:
         return jsonify({"error": "Invalid date format"}), 400
 
-    # 3) Fetch all transactions (no user filter)
     txns = Transaction.query.all()
-
-    # 4) Build (datetime, amount) pairs and apply filters
     pairs = []
     for t in txns:
         dt = t.date_time
@@ -271,7 +240,6 @@ def api_regression():
             continue
         pairs.append((dt, float(t.amount)))
 
-    # 5) If no data, return nulls
     if not pairs:
         return (
             jsonify(
@@ -285,15 +253,12 @@ def api_regression():
             200,
         )
 
-    # 6) Compute regression
     ts_amounts = [(d.timestamp(), a) for d, a in pairs]
     stats = compute_regression(ts_amounts)
     slope = float(stats["slope"])
     intercept = float(stats["intercept"])
     r_squared = float(stats["r_squared"])
 
-    # 7) Render chart
-    matplotlib.use("Agg")
     fig, ax = plt.subplots(figsize=(8, 4))
     dates = [d for d, _ in pairs]
     amounts = [a for _, a in pairs]
@@ -315,7 +280,6 @@ def api_regression():
     buf.seek(0)
     chart_b64 = base64.b64encode(buf.read()).decode("ascii")
 
-    # 8) Return JSON
     return (
         jsonify(
             {
