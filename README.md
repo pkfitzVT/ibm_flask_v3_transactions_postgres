@@ -84,11 +84,23 @@ Install production dependencies:
 pip install -r requirements.txt
 ```
 
+> **Note:** `requirements.txt` should include pinned versions of your core libraries. You can generate it via:
+>
+> ```bash
+> pip freeze > requirements.txt
+> ```
+
 Install development/test dependencies:
 
 ```bash
 pip install -r requirements_dev.txt
 ```
+
+> **Note:** `requirements_dev.txt` should list tools like pytest, flake8, black, isort, and any other dev-only packages. To generate it, you can manually list your dev packages or use:
+>
+> ```bash
+> pip freeze > requirements_dev.txt
+> ```
 
 ### Environment Variables
 
