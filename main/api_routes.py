@@ -15,8 +15,7 @@ from auth.utils import login_required
 from extensions import db
 from models import Transaction, User
 
-from .data import transactions
-from .stats.abtest import run_ab_test
+from .stats import abtest
 from .stats.regression import compute_regression
 
 # Configure matplotlib backend after imports
@@ -81,13 +80,51 @@ def api_me():
 
 
 # --- Transactions endpoints ---
+@api_bp.route("/transactions", methods=["POST"])
+@login_required
+def create_transaction():
+    data = request.get_json() or {}
+    dt_str = data.get("dateTime")
+    amt = data.get("amount")
+
+    # 1) Validate presence
+    if not dt_str or amt is None:
+        return jsonify({"error": "Missing dateTime or amount"}), 400
+
+    # 2) Parse
+    try:
+        dt_val = datetime.fromisoformat(dt_str)
+        amount_val = float(amt)
+    except ValueError:
+        return jsonify({"error": "Invalid dateTime or amount format"}), 400
+
+    # 3) Persist
+    txn = Transaction(
+        user_id=session["user_id"],
+        date_time=dt_val,
+        amount=amount_val,
+    )
+    db.session.add(txn)
+    db.session.commit()
+
+    # 4) Return with amount as a number, not a string
+    return (
+        jsonify(
+            {
+                "id": txn.id,
+                "dateTime": txn.date_time.isoformat(),
+                "amount": float(txn.amount),  # <— here
+            }
+        ),
+        201,
+    )
 
 
 @api_bp.route("/transactions", methods=["GET"])
 @login_required
 def list_transactions():
     payload = []
-    for t in transactions:
+    for t in Transaction.query.all():
         copy_t = t.copy()
         if "dateTime" not in copy_t:
             original = copy_t.get("date")
@@ -99,24 +136,6 @@ def list_transactions():
                 copy_t["dateTime"] = None
         payload.append(copy_t)
     return jsonify(payload), 200
-
-
-@api_bp.route("/transactions", methods=["POST"])
-@login_required
-def create_transaction():
-    try:
-        data = request.get_json() or {}
-        dt = data.get("dateTime")
-        amt = data.get("amount")
-        if not dt or amt is None:
-            return jsonify({"error": "Missing dateTime or amount"}), 400
-        max_id = max((t["id"] for t in transactions), default=0)
-        new_txn = {"id": max_id + 1, "dateTime": dt, "amount": amt}
-        transactions.append(new_txn)
-        return jsonify(new_txn), 201
-    except Exception:
-        current_app.logger.exception("Error creating transaction")
-        return jsonify({"error": "Internal server error"}), 500
 
 
 @api_bp.route("/transactions/<int:txn_id>", methods=["PUT", "PATCH"])
@@ -163,18 +182,49 @@ def delete_transaction(txn_id):
 @api_bp.route("/analysis/abtest", methods=["GET", "POST"])
 @login_required
 def api_ab_test():
+    """
+    A/B test endpoint:
+      - GET returns default A/B test results
+      - POST accepts JSON { group_by, param_a, param_b } for custom test
+    Response JSON: {
+      "groupA": [...],
+      "groupB": [...],
+      "p_value": float or None,
+      "boxplot_img": base64-string
+    }
+    """
     try:
+        # 1) Fetch this user's transactions from the database
+        user_id = session.get("user_id")
+        txns = Transaction.query.filter_by(user_id=user_id).all()
+
+        # 2) Build the flat dicts that run_ab_test() expects
+        records = [
+            {
+                "dateTime": t.date_time.isoformat(),
+                # include any grouping field your tests expect:
+                "description": t.description,
+                "amount": float(t.amount),
+            }
+            for t in txns
+        ]
+
+        # 3) Monkey-patch the A/B-test module so run_ab_test() sees YOUR data
+        abtest.transactions = records
+
+        # 4) Call run_ab_test() (GET uses defaults; POST can override via JSON)
         if request.method == "POST":
-            data = request.get_json(force=True) or {}
-            group_by = data.get("group_by")
-            param_a = data.get("param_a")
-            param_b = data.get("param_b")
-            if not group_by or not param_a or not param_b:
-                return jsonify({"error": "Missing parameters"}), 400
-            result = run_ab_test(group_by, param_a, param_b)
+            params = request.get_json(force=True) or {}
+            result = abtest.run_ab_test(
+                group_by=params.get("group_by"),
+                param_a=params.get("param_a"),
+                param_b=params.get("param_b"),
+            )
         else:
-            result = run_ab_test()
+            result = abtest.run_ab_test()
+
         return jsonify(result), 200
+
     except Exception as e:
         current_app.logger.exception("Error running A/B test")
         return jsonify({"error": str(e)}), 500
@@ -183,61 +233,77 @@ def api_ab_test():
 @api_bp.route("/analysis/regression", methods=["GET"])
 @login_required
 def api_regression():
+    """
+    Regression endpoint:
+      - GET returns slope, intercept, r_squared, chart_img
+      - Operates over all transactions (no user_id filter)
+    """
+    # 1) Time-of-day filter
     period = request.args.get("period", "all").lower()
     if period == "morning":
-        hours = list(range(0, 12))
+        hours = range(0, 12)
     elif period == "noon":
-        hours = [12]
+        hours = (12,)
     elif period == "afternoon":
-        hours = list(range(13, 18))
+        hours = range(13, 18)
     else:
         hours = None
 
+    # 2) Date-range filters
     start_str = request.args.get("start_date")
     end_str = request.args.get("end_date")
-    start_dt = datetime.fromisoformat(start_str) if start_str else None
-    end_dt = datetime.fromisoformat(end_str) if end_str else None
+    try:
+        start_dt = datetime.fromisoformat(start_str) if start_str else None
+        end_dt = datetime.fromisoformat(end_str) if end_str else None
+    except ValueError:
+        return jsonify({"error": "Invalid date format"}), 400
 
+    # 3) Fetch all transactions (no user filter)
+    txns = Transaction.query.all()
+
+    # 4) Build (datetime, amount) pairs and apply filters
     pairs = []
-    for t in transactions:
-        raw = t.get("dateTime") or t.get("date")
-        if not raw:
+    for t in txns:
+        dt = t.date_time
+        if (start_dt and dt < start_dt) or (end_dt and dt > end_dt):
             continue
-        dt = (
-            raw
-            if isinstance(raw, datetime)
-            else datetime.fromisoformat(raw if "T" in raw else f"{raw}T00:00:00")
-        )
-        if (
-            (start_dt and dt < start_dt)
-            or (end_dt and dt > end_dt)
-            or (hours and dt.hour not in hours)
-        ):
+        if hours and dt.hour not in hours:
             continue
-        pairs.append((dt, float(t["amount"])))
+        pairs.append((dt, float(t.amount)))
 
+    # 5) If no data, return nulls
     if not pairs:
         return (
             jsonify(
-                {"slope": None, "intercept": None, "r_squared": None, "chart_img": None}
+                {
+                    "slope": None,
+                    "intercept": None,
+                    "r_squared": None,
+                    "chart_img": None,
+                }
             ),
             200,
         )
 
+    # 6) Compute regression
     ts_amounts = [(d.timestamp(), a) for d, a in pairs]
-    slope, intercept, r_val, p_val, std_err = compute_regression(ts_amounts)
+    stats = compute_regression(ts_amounts)
+    slope = float(stats["slope"])
+    intercept = float(stats["intercept"])
+    r_squared = float(stats["r_squared"])
 
+    # 7) Render chart
+    matplotlib.use("Agg")
     fig, ax = plt.subplots(figsize=(8, 4))
     dates = [d for d, _ in pairs]
     amounts = [a for _, a in pairs]
     ax.scatter(dates, amounts, alpha=0.6, label="Data")
-    xs_ts = np.array([d.timestamp() for d in dates])
-    ax.plot(dates, intercept + slope * xs_ts, linewidth=2, label="Trend")
+    xs = np.array([d.timestamp() for d in dates])
+    ax.plot(dates, intercept + slope * xs, linewidth=2, label="Trend")
 
     locator = mdates.AutoDateLocator()
-    formatter = mdates.ConciseDateFormatter(locator)
     ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(formatter)
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
     fig.autofmt_xdate()
     ax.set_title("Regression Analysis")
     ax.set_ylabel("Amount")
@@ -248,12 +314,14 @@ def api_regression():
     plt.close(fig)
     buf.seek(0)
     chart_b64 = base64.b64encode(buf.read()).decode("ascii")
+
+    # 8) Return JSON
     return (
         jsonify(
             {
-                "slope": float(slope),
-                "intercept": float(intercept),
-                "r_squared": float(r_val**2),
+                "slope": slope,
+                "intercept": intercept,
+                "r_squared": r_squared,
                 "chart_img": chart_b64,
             }
         ),

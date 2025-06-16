@@ -4,15 +4,15 @@ import os
 from flask import Flask
 from flask_cors import CORS
 
-import models  # noqa: F401 – ensure models are imported for Alembic
+import models  # noqa: F401 – ensure models are imported for migrations
 from auth.routes import auth_bp
 from extensions import db, migrate
 from main.api_routes import api_bp
 from main.routes import main_bp
 
-# Pytest sets this env variable while running tests; we skip the guard if it is present.
+# Pytest sets this env var while running tests; skip guard when present
 PYTEST_ENV_VAR = "PYTEST_CURRENT_TEST"
-# You can also bypass the guard manually (e.g. for migrations/seed) with this env var.
+# Manual override for migrations/seed
 SKIP_GUARD_ENV_VAR = "FLASK_SKIP_GUARD"
 
 
@@ -21,30 +21,32 @@ def create_app() -> Flask:
     app = Flask(__name__)
 
     # ------------------------------------------------------------------
-    # 1) Load configuration (SECRET_KEY, SQLALCHEMY_DATABASE_URI, etc.)
+    # 1) Load configuration
     # ------------------------------------------------------------------
     app.config.from_pyfile("config.py")
 
     # ------------------------------------------------------------------
-    # 2) Initialise extensions (db, migrate) BEFORE any guard that uses them
+    # 1a) If running tests under pytest, override to in-memory SQLite
+    #    (applies only when TESTING or during pytest collection)
+    # ------------------------------------------------------------------
+    if app.config.get("TESTING", False) or os.getenv(PYTEST_ENV_VAR):
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+
+    # ------------------------------------------------------------------
+    # 2) Initialise extensions
     # ------------------------------------------------------------------
     db.init_app(app)
     migrate.init_app(app, db)
 
     # ------------------------------------------------------------------
-    # 3) SAFETY GUARD — prevent destructive ops on Postgres in dev/prod
-    #    Guard is skipped when:
-    #      • TESTING=True (pytest fixture)
-    #      • PYTEST_ENV_VAR is set (pytest collection phase)
-    #      • SKIP_GUARD_ENV_VAR is set manually (e.g. during migrations)
+    # 3) SAFETY GUARD – protect Postgres in dev/prod
     # ------------------------------------------------------------------
     guard_needed = (
         not app.config.get("TESTING", False)
         and not os.getenv(PYTEST_ENV_VAR)
         and not os.getenv(SKIP_GUARD_ENV_VAR)
-        and app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql://")
+        and app.config.get("SQLALCHEMY_DATABASE_URI", "").startswith("postgresql://")
     )
-
     if guard_needed:
         with app.app_context():
             from sqlalchemy import inspect
